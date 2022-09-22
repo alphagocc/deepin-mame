@@ -1,0 +1,9 @@
+#genie_freebsd_target.patch
+python3.patch
+hurd.patch
+sphinx_mathjax_location.patch
+#m68000_archopts.patch
+kfreebsd_dirent.h_path.patch
+sphinx_remove_unresolved_module.patch
+fix-922619.patch
+#fix-bx-ppc64el.patch #accepted upstream
