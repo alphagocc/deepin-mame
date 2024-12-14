@@ -98,6 +98,7 @@ void spectrum_lprint3_device::device_add_mconfig(machine_config &config)
 	SPECTRUM_EXPANSION_SLOT(config, m_exp, spectrum_expansion_devices, nullptr);
 	m_exp->irq_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::irq_w));
 	m_exp->nmi_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::nmi_w));
+	m_exp->fb_r_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::fb_r));
 }
 
 void spectrum_kempcentrs_device::device_add_mconfig(machine_config &config)
@@ -250,7 +251,7 @@ void spectrum_kempcentre_device::device_reset()
 //  IMPLEMENTATION (lprint)
 //**************************************************************************
 
-READ_LINE_MEMBER(spectrum_lprint_device::romcs)
+bool spectrum_lprint_device::romcs()
 {
 	return m_romcs;
 }
@@ -279,7 +280,7 @@ uint8_t spectrum_lprint_device::mreq_r(offs_t offset)
 
 uint8_t spectrum_lprint_device::iorq_r(offs_t offset)
 {
-	uint8_t data = 0xff;
+	uint8_t data = offset & 1 ? m_slot->fb_r() : 0xff;
 
 	if (!BIT(offset, 2))
 	{
@@ -314,9 +315,9 @@ void spectrum_lprint_device::iorq_w(offs_t offset, uint8_t data)
 //  IMPLEMENTATION (lprint3)
 //**************************************************************************
 
-READ_LINE_MEMBER(spectrum_lprint3_device::romcs)
+bool spectrum_lprint3_device::romcs()
 {
-	return m_romcs | m_exp->romcs();
+	return m_romcs || m_exp->romcs();
 }
 
 uint8_t spectrum_lprint3_device::iorq_r(offs_t offset)
@@ -374,7 +375,7 @@ uint8_t spectrum_lprint3_device::mreq_r(offs_t offset)
 
 uint8_t spectrum_kempcentrs_device::iorq_r(offs_t offset)
 {
-	uint8_t data = 0xff;
+	uint8_t data = offset & 1 ? m_slot->fb_r() : 0xff;
 
 	switch (offset)
 	{
@@ -413,7 +414,7 @@ void spectrum_kempcentrs_device::iorq_w(offs_t offset, uint8_t data)
 //  IMPLEMENTATION (kempcentre)
 //**************************************************************************
 
-READ_LINE_MEMBER(spectrum_kempcentre_device::romcs)
+bool spectrum_kempcentre_device::romcs()
 {
 	return m_romcs;
 }
@@ -432,7 +433,7 @@ void spectrum_kempcentre_device::pre_data_fetch(offs_t offset)
 
 uint8_t spectrum_kempcentre_device::iorq_r(offs_t offset)
 {
-	uint8_t data = 0xff;
+	uint8_t data = offset & 1 ? m_slot->fb_r() : 0xff;
 
 	if (!BIT(offset, 2)) // earlier version ? uses same paging as Lprint III
 	{
@@ -506,7 +507,7 @@ void spectrum_kempcentreu_device::pre_opcode_fetch(offs_t offset)
 
 uint8_t spectrum_kempcentreu_device::iorq_r(offs_t offset)
 {
-	uint8_t data = 0xff;
+	uint8_t data = offset & 1 ? m_slot->fb_r() : 0xff;
 
 	if ((offset & 0xf0) == 0xb0) // BB or BF, actual address decode is not known
 	{

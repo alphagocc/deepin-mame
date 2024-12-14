@@ -66,9 +66,9 @@ public:
 	auto ff_handler() { return m_ff_handler.bind(); }
 	auto hf_handler() { return m_hf_handler.bind(); }
 
-	DECLARE_READ_LINE_MEMBER( ef_r ) { return !m_ef; } // _EF
-	DECLARE_READ_LINE_MEMBER( ff_r ) { return !m_ff; } // _FF
-	DECLARE_READ_LINE_MEMBER( hf_r ) { return !m_hf; } // _HF
+	int ef_r() { return !m_ef; } // _EF
+	int ff_r() { return !m_ff; } // _FF
+	int hf_r() { return !m_hf; } // _HF
 
 	// normal configuration
 	void data_word_w(uint16_t data) { fifo_write(data); }
@@ -82,12 +82,13 @@ protected:
 	fifo7200_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, int size);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 private:
 	void fifo_write(uint16_t data);
 	uint16_t fifo_read();
+	int fifo_used();
 
 	std::vector<uint16_t> m_buffer;
 	const int m_ram_size;

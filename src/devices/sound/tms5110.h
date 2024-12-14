@@ -53,11 +53,11 @@ protected:
 	tms5110_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, int variant);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_clock_changed() override;
 
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	TIMER_CALLBACK_MEMBER(romclk_hack_toggle);
 
 	// sound stream update overrides
 	virtual void sound_stream_update(sound_stream &stream, std::vector<read_stream_view> const &inputs, std::vector<write_stream_view> &outputs) override;
@@ -74,7 +74,7 @@ private:
 	void new_int_write_addr(uint8_t addr);
 	uint8_t new_int_read();
 	void register_for_save_states();
-	int extract_bits(int count);
+	int read_bits(int count);
 	void perform_dummy_read();
 	int32_t lattice_filter();
 	void process(int16_t *buffer, unsigned int size);
@@ -283,9 +283,9 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	TIMER_CALLBACK_MEMBER(update_romclk);
 
 private:
 	void register_for_save_states();

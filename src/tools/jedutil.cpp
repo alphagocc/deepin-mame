@@ -2999,7 +2999,7 @@ static void generate_product_terms(const pal_data* pal, const jed_data* jed, uin
 
 			if (!is_output_pin(pin))
 			{
-				sprintf(tmpbuffer, LOW_SYMBOL INPUT_SYMBOL "%d", pin);
+				snprintf(tmpbuffer, 20, LOW_SYMBOL INPUT_SYMBOL "%d", pin);
 				strcat(buffer, tmpbuffer);
 			}
 			else
@@ -3010,11 +3010,11 @@ static void generate_product_terms(const pal_data* pal, const jed_data* jed, uin
 				{
 					if (flags & OUTPUT_COMBINATORIAL)
 					{
-						sprintf(tmpbuffer, LOW_SYMBOL OUTPUT_SYMBOL "%d", pin);
+						snprintf(tmpbuffer, 20, LOW_SYMBOL OUTPUT_SYMBOL "%d", pin);
 					}
 					else if (flags & OUTPUT_REGISTERED)
 					{
-						sprintf(tmpbuffer, LOW_SYMBOL REGISTERED_FEEDBACK_OUTPUT_SYMBOL "%d", pin);
+						snprintf(tmpbuffer, 20, LOW_SYMBOL REGISTERED_FEEDBACK_OUTPUT_SYMBOL "%d", pin);
 					}
 					else
 					{
@@ -3025,11 +3025,11 @@ static void generate_product_terms(const pal_data* pal, const jed_data* jed, uin
 				}
 				else if (flags & OUTPUT_FEEDBACK_COMBINATORIAL)
 				{
-					sprintf(tmpbuffer, LOW_SYMBOL OUTPUT_FEEDBACK_SYMBOL "%d", pin);
+					snprintf(tmpbuffer, 20, LOW_SYMBOL OUTPUT_FEEDBACK_SYMBOL "%d", pin);
 				}
 				else if (flags & OUTPUT_FEEDBACK_REGISTERED)
 				{
-					sprintf(tmpbuffer, LOW_SYMBOL REGISTERED_FEEDBACK_SYMBOL "%d", pin);
+					snprintf(tmpbuffer, 20, LOW_SYMBOL REGISTERED_FEEDBACK_SYMBOL "%d", pin);
 				}
 				else
 				{
@@ -3053,7 +3053,7 @@ static void generate_product_terms(const pal_data* pal, const jed_data* jed, uin
 
 			if (!is_output_pin(pin))
 			{
-				sprintf(tmpbuffer, INPUT_SYMBOL "%d", pin);
+				snprintf(tmpbuffer, 20, INPUT_SYMBOL "%d", pin);
 				strcat(buffer, tmpbuffer);
 			}
 			else
@@ -3064,11 +3064,11 @@ static void generate_product_terms(const pal_data* pal, const jed_data* jed, uin
 				{
 					if (flags & OUTPUT_COMBINATORIAL)
 					{
-						sprintf(tmpbuffer, OUTPUT_SYMBOL "%d", pin);
+						snprintf(tmpbuffer, 20, OUTPUT_SYMBOL "%d", pin);
 					}
 					else if (flags & OUTPUT_REGISTERED)
 					{
-						sprintf(tmpbuffer, REGISTERED_FEEDBACK_OUTPUT_SYMBOL "%d", pin);
+						snprintf(tmpbuffer, 20, REGISTERED_FEEDBACK_OUTPUT_SYMBOL "%d", pin);
 					}
 					else
 					{
@@ -3079,11 +3079,11 @@ static void generate_product_terms(const pal_data* pal, const jed_data* jed, uin
 				}
 				else if (flags & OUTPUT_FEEDBACK_COMBINATORIAL)
 				{
-					sprintf(tmpbuffer, OUTPUT_FEEDBACK_SYMBOL "%d", pin);
+					snprintf(tmpbuffer, 20, OUTPUT_FEEDBACK_SYMBOL "%d", pin);
 				}
 				else if (flags & OUTPUT_FEEDBACK_REGISTERED)
 				{
-					sprintf(tmpbuffer, REGISTERED_FEEDBACK_SYMBOL "%d", pin);
+					snprintf(tmpbuffer, 20, REGISTERED_FEEDBACK_SYMBOL "%d", pin);
 				}
 				else
 				{
@@ -3232,11 +3232,11 @@ static void print_product_terms(const pal_data* pal, const jed_data* jed)
 
 		if (flags & OUTPUT_COMBINATORIAL)
 		{
-			sprintf(buffer, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
+			snprintf(buffer, 200, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
 		}
 		else if (flags & OUTPUT_REGISTERED)
 		{
-			sprintf(buffer, REGISTERED_FEEDBACK_SYMBOL "%d " REGISTERED_ASSIGNMENT " ", outputpins[index].pin);
+			snprintf(buffer, 200, REGISTERED_FEEDBACK_SYMBOL "%d " REGISTERED_ASSIGNMENT " ", outputpins[index].pin);
 		}
 		else
 		{
@@ -3357,7 +3357,7 @@ static void print_pal20xxx_product_terms(const pal_data* pal, const jed_data* je
 
 		if (flags & OUTPUT_COMBINATORIAL)
 		{
-			sprintf(buffer, LOW_SYMBOL OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
+			snprintf(buffer, 200, LOW_SYMBOL OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
 
 			printf("%s", buffer);
 
@@ -3412,7 +3412,7 @@ static void print_pal20xxx_product_terms(const pal_data* pal, const jed_data* je
 		}
 		else if (flags & OUTPUT_REGISTERED)
 		{
-			sprintf(buffer, LOW_SYMBOL REGISTERED_FEEDBACK_SYMBOL "%d " REGISTERED_ASSIGNMENT " ", outputpins[index].pin);
+			snprintf(buffer, 200, LOW_SYMBOL REGISTERED_FEEDBACK_SYMBOL "%d " REGISTERED_ASSIGNMENT " ", outputpins[index].pin);
 
 			printf("%s", buffer);
 
@@ -4002,7 +4002,7 @@ static void print_82s153_pls153_product_terms(const pal_data* pal, const jed_dat
 			indent += strlen(LOW_SYMBOL);
 		}
 
-		sprintf(buffer, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
+		snprintf(buffer, 200, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
 
 		printf("%s", buffer);
 
@@ -4105,7 +4105,7 @@ static void print_ck2605_product_terms(const pal_data* pal, const jed_data* jed)
 			indent += strlen(LOW_SYMBOL);
 		}
 
-		sprintf(buffer, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
+		snprintf(buffer, 200, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
 
 		printf("%s", buffer);
 
@@ -4228,7 +4228,7 @@ static void print_epl10p8_product_terms(const pal_data* pal, const jed_data* jed
 			indent += strlen(LOW_SYMBOL);
 		}
 
-		sprintf(buffer, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
+		snprintf(buffer, 200, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
 
 		printf("%s", buffer);
 
@@ -4687,7 +4687,7 @@ static void print_82s100_pls100_product_terms(const pal_data* pal, const jed_dat
 			indent += strlen(LOW_SYMBOL);
 		}
 
-		sprintf(buffer, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
+		snprintf(buffer, 200, OUTPUT_SYMBOL "%d " COMBINATORIAL_ASSIGNMENT " ", outputpins[index].pin);
 
 		printf("%s", buffer);
 
@@ -5270,22 +5270,46 @@ static void config_gal16v8_pins(const pal_data* pal, const jed_data* jed)
 
 			for (index = 0; index < std::size(macrocells); ++index)
 			{
-				if (jed_get_fuse(jed, macrocells[index].ac1_fuse))
+				if (macrocells[index].pin != 15 && macrocells[index].pin != 16)
 				{
-					/* Pin is for input only */
-
-					input_pins_combinatorialsimple[input_pin_count] = macrocells[index].pin;
-
-					++input_pin_count;
-
-					if (macrocells[index].pin == 15 || macrocells[index].pin == 16)
+					if (jed_get_fuse(jed, macrocells[index].ac1_fuse))
 					{
-						fprintf(stderr, "Pin %d cannot be configured as an input pin.\n",
-								macrocells[index].pin);
+						/* Pin is for input only */
+
+						input_pins_combinatorialsimple[input_pin_count] = macrocells[index].pin;
+
+						++input_pin_count;
+					}
+					else
+					{
+						output_pins[output_pin_count].pin = macrocells[index].pin;
+						output_pins[output_pin_count].flags = OUTPUT_COMBINATORIAL;
+
+						if (jed_get_fuse(jed, macrocells[index].xor_fuse))
+						{
+							output_pins[output_pin_count].flags |= OUTPUT_ACTIVEHIGH;
+						}
+						else
+						{
+							output_pins[output_pin_count].flags |= OUTPUT_ACTIVELOW;
+						}
+
+						output_pins[output_pin_count].flags |= OUTPUT_FEEDBACK_OUTPUT;
+
+						input_pins_combinatorialsimple[input_pin_count] = macrocells[index].pin;
+
+						++input_pin_count;
+
+						++output_pin_count;
 					}
 				}
 				else
 				{
+					/* For pins 15 and 16 ignore the value of the ac1_fuse (This
+					   normally determine if the pin is an input or output.) because
+					   according to the datasheet these macrocells are output
+					   only when in simple mode. */
+
 					output_pins[output_pin_count].pin = macrocells[index].pin;
 					output_pins[output_pin_count].flags = OUTPUT_COMBINATORIAL;
 
@@ -5298,19 +5322,7 @@ static void config_gal16v8_pins(const pal_data* pal, const jed_data* jed)
 						output_pins[output_pin_count].flags |= OUTPUT_ACTIVELOW;
 					}
 
-					if (output_pins[output_pin_count].pin != 15 &&
-						output_pins[output_pin_count].pin != 16)
-					{
-						output_pins[output_pin_count].flags |= OUTPUT_FEEDBACK_OUTPUT;
-
-						input_pins_combinatorialsimple[input_pin_count] = macrocells[index].pin;
-
-						++input_pin_count;
-					}
-					else
-					{
-						output_pins[output_pin_count].flags |= OUTPUT_FEEDBACK_NONE;
-					}
+					output_pins[output_pin_count].flags |= OUTPUT_FEEDBACK_NONE;
 
 					++output_pin_count;
 				}

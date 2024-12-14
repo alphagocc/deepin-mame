@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "softlist_dev.h"
+#include "imagedev/cartrom.h"
 
 
 //**************************************************************************
@@ -49,7 +49,7 @@ class device_colecovision_cartridge_interface;
 
 class colecovision_cartridge_slot_device : public device_t,
 											public device_single_card_slot_interface<device_colecovision_cartridge_interface>,
-											public device_image_interface
+											public device_cartrom_image_interface
 {
 public:
 	// construction/destruction
@@ -65,27 +65,21 @@ public:
 	colecovision_cartridge_slot_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 	// computer interface
-	uint8_t bd_r(offs_t offset, uint8_t data, int _8000, int _a000, int _c000, int _e000);
+	uint8_t read(offs_t offset, int _8000, int _a000, int _c000, int _e000);
+	void write(offs_t offset, uint8_t data, int _8000, int _a000, int _c000, int _e000);
 
 protected:
-	// device-level overrides
-	virtual void device_start() override;
+	// device_t implementation
+	virtual void device_start() override ATTR_COLD;
 
-	// image-level overrides
-	virtual image_init_result call_load() override;
-	virtual const software_list_loader &get_software_list_loader() const override { return rom_software_list_loader::instance(); }
+	// device_image_interface implementation
+	virtual std::pair<std::error_condition, std::string> call_load() override;
 
-	virtual iodevice_t image_type() const noexcept override { return IO_CARTSLOT; }
-
-	virtual bool is_readable()  const noexcept override { return true; }
-	virtual bool is_writeable() const noexcept override { return false; }
-	virtual bool is_creatable() const noexcept override { return false; }
-	virtual bool must_be_loaded() const noexcept override { return false; }
 	virtual bool is_reset_on_load() const noexcept override { return true; }
 	virtual const char *image_interface() const noexcept override { return "coleco_cart"; }
 	virtual const char *file_extensions() const noexcept override { return "rom,col,bin"; }
 
-	// slot interface overrides
+	// device_slot_interface implementation
 	virtual std::string get_default_card_software(get_default_card_software_hook &hook) const override;
 
 	device_colecovision_cartridge_interface *m_card;
@@ -99,7 +93,8 @@ class device_colecovision_cartridge_interface : public device_interface
 	friend class colecovision_cartridge_slot_device;
 
 public:
-	virtual uint8_t bd_r(offs_t offset, uint8_t data, int _8000, int _a000, int _c000, int _e000) { return 0xff; }
+	virtual uint8_t read(offs_t offset, int _8000, int _a000, int _c000, int _e000) { return 0xff; }
+	virtual void write(offs_t offset, uint8_t data, int _8000, int _a000, int _c000, int _e000) { }
 
 	void rom_alloc(size_t size);
 

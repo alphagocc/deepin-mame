@@ -2,7 +2,7 @@
 // detail/executor_op.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -18,7 +18,6 @@
 #include "asio/detail/config.hpp"
 #include "asio/detail/fenced_block.hpp"
 #include "asio/detail/handler_alloc_helpers.hpp"
-#include "asio/detail/handler_invoke_helpers.hpp"
 #include "asio/detail/scheduler_operation.hpp"
 
 #include "asio/detail/push_options.hpp"
@@ -31,11 +30,12 @@ template <typename Handler, typename Alloc,
 class executor_op : public Operation
 {
 public:
-  ASIO_DEFINE_HANDLER_ALLOCATOR_PTR(executor_op, Alloc);
+  ASIO_DEFINE_HANDLER_ALLOCATOR_PTR(executor_op);
 
-  executor_op(Handler& h, const Alloc& allocator)
+  template <typename H>
+  executor_op(H&& h, const Alloc& allocator)
     : Operation(&executor_op::do_complete),
-      handler_(ASIO_MOVE_CAST(Handler)(h)),
+      handler_(static_cast<H&&>(h)),
       allocator_(allocator)
   {
   }
@@ -45,8 +45,10 @@ public:
       std::size_t /*bytes_transferred*/)
   {
     // Take ownership of the handler object.
+    ASIO_ASSUME(base != 0);
     executor_op* o(static_cast<executor_op*>(base));
-    ptr p = { o->allocator_, o, o };
+    Alloc allocator(o->allocator_);
+    ptr p = { detail::addressof(allocator), o, o };
 
     ASIO_HANDLER_COMPLETION((*o));
 
@@ -56,7 +58,7 @@ public:
     // with the handler. Consequently, a local copy of the handler is required
     // to ensure that any owning sub-object remains valid until after we have
     // deallocated the memory here.
-    Handler handler(ASIO_MOVE_CAST(Handler)(o->handler_));
+    Handler handler(static_cast<Handler&&>(o->handler_));
     p.reset();
 
     // Make the upcall if required.
@@ -64,7 +66,7 @@ public:
     {
       fenced_block b(fenced_block::half);
       ASIO_HANDLER_INVOCATION_BEGIN(());
-      asio_handler_invoke_helpers::invoke(handler, handler);
+      static_cast<Handler&&>(handler)();
       ASIO_HANDLER_INVOCATION_END;
     }
   }

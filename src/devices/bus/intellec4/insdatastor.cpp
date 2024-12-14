@@ -168,25 +168,23 @@ class imm4_22_device
 public:
 	imm4_22_device(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
 
-	virtual image_init_result call_load() override;
+	virtual std::pair<std::error_condition, std::string> call_load() override;
 	virtual void call_unload() override;
 
-	virtual iodevice_t  image_type()                    const noexcept override { return IO_ROM; }
 	virtual bool        is_readable()                   const noexcept override { return true; }
 	virtual bool        is_writeable()                  const noexcept override { return false; }
 	virtual bool        is_creatable()                  const noexcept override { return false; }
-	virtual bool        must_be_loaded()                const noexcept override { return false; }
 	virtual bool        is_reset_on_load()              const noexcept override { return false; }
 	virtual char const *file_extensions()               const noexcept override { return "rom,bin"; }
-	virtual char const *custom_instance_name()          const noexcept override { return "promimage"; }
-	virtual char const *custom_brief_instance_name()    const noexcept override { return "prom"; }
+	virtual char const *image_type_name()               const noexcept override { return "promimage"; }
+	virtual char const *image_brief_type_name()         const noexcept override { return "prom"; }
 
 protected:
-	virtual ioport_constructor device_input_ports() const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
-	virtual DECLARE_WRITE_LINE_MEMBER(reset_4002_in) override;
+	virtual void reset_4002_in(int state) override;
 
 private:
 	void ram_out(offs_t offset, u8 data);
@@ -224,18 +222,22 @@ imm4_22_device::imm4_22_device(machine_config const &mconfig, char const *tag, d
 }
 
 
-image_init_result imm4_22_device::call_load()
+std::pair<std::error_condition, std::string> imm4_22_device::call_load()
 {
 	if ((length() > 1024U) || (length() % 256U))
-		return image_init_result::FAIL;
+	{
+		return std::make_pair(
+				image_error::INVALIDLENGTH,
+				"Invalid PROM image size (must be a multiple of 256 bytes no larger than 1K)");
+	}
 
 	allocate();
 	if (fread(m_prom.get(), length()) != length())
-		return image_init_result::FAIL;
+		return std::make_pair(image_error::UNSPECIFIED, "Error reading file");
 
 	map_prom();
 
-	return image_init_result::PASS;
+	return std::make_pair(std::error_condition(), std::string());
 }
 
 void imm4_22_device::call_unload()
@@ -269,7 +271,7 @@ void imm4_22_device::device_reset()
 }
 
 
-WRITE_LINE_MEMBER(imm4_22_device::reset_4002_in)
+void imm4_22_device::reset_4002_in(int state)
 {
 	// FIXME: this takes several cycles to actually erase everything, and prevents writes while asserted
 	if (!state)

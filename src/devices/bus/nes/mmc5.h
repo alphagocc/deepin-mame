@@ -31,13 +31,13 @@ public:
 	virtual uint8_t nt_r(offs_t offset) override;
 	virtual void nt_w(offs_t offset, uint8_t data) override;
 
-	virtual void hblank_irq(int scanline, int vblank, int blanked) override;
+	virtual void hblank_irq(int scanline, bool vblank, bool blanked) override;
 	virtual void pcb_reset() override;
 
 protected:
 	// device-level overrides
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
 
 	void set_mirror(int page, int src);
 	void update_prg();

@@ -103,14 +103,16 @@ void base_28fxxx_device::nvram_default()
 		erase();
 }
 
-void base_28fxxx_device::nvram_read(emu_file &file)
+bool base_28fxxx_device::nvram_read(util::read_stream &file)
 {
-	file.read(m_data.get(), m_size);
+	auto const [err, actual] = util::read(file, m_data.get(), m_size);
+	return !err && (actual == m_size);
 }
 
-void base_28fxxx_device::nvram_write(emu_file &file)
+bool base_28fxxx_device::nvram_write(util::write_stream &file)
 {
-	file.write(m_data.get(), m_size);
+	auto const [err, actual] = util::write(file, m_data.get(), m_size);
+	return !err;
 }
 
 void base_28fxxx_device::erase()

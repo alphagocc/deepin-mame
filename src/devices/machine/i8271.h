@@ -39,12 +39,13 @@ public:
 	void set_floppies(floppy_connector* f0, floppy_connector* f1);
 	void soft_reset();
 
-	void map(address_map &map);
+	void map(address_map &map) ATTR_COLD;
 
 protected:
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(floppy_tick);
 
 private:
 	enum {
@@ -234,7 +235,7 @@ private:
 	void cmd_w(uint8_t data);
 	void param_w(uint8_t data);
 
-	void delay_cycles(emu_timer *tm, int cycles);
+	void delay_cycles(floppy_info &fi, int cycles);
 	void set_drq(bool state);
 	void set_irq(bool state);
 	bool get_ready(int fid);

@@ -42,7 +42,6 @@
 #include "emu.h"
 #include "lr35902.h"
 #include "lr35902d.h"
-#include "debugger.h"
 
 /* Flag bit definitions */
 enum lr35902_flag
@@ -139,10 +138,6 @@ inline void lr35902_cpu_device::mem_write_word( uint16_t addr, uint16_t data )
 void lr35902_cpu_device::device_start()
 {
 	m_program = &space(AS_PROGRAM);
-
-	// resolve callbacks
-	m_timer_func.resolve_safe();
-	m_incdec16_func.resolve_safe();
 
 	// register for save states
 	save_item(NAME(m_A));
@@ -362,12 +357,13 @@ void lr35902_cpu_device::execute_run()
 				/* Fetch and count cycles */
 				bool was_halted = (m_enable & HALTED);
 				check_interrupts();
-				debugger_instruction_hook(m_PC);
 				if ( m_enable & HALTED ) {
+					debugger_wait_hook();
 					cycles_passed(m_has_halt_bug ? 2 : 4);
 					m_execution_state = 1;
 					m_entering_halt = false;
 				} else {
+					debugger_instruction_hook(m_PC);
 					if (was_halted) {
 						m_PC++;
 					} else {

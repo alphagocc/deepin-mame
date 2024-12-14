@@ -20,10 +20,6 @@ public:
 	virtual void write_m(offs_t offset, uint8_t data) override;
 
 	virtual void pcb_reset() override;
-
-protected:
-	// device-level overrides
-	virtual void device_start() override;
 };
 
 
@@ -38,10 +34,6 @@ public:
 	virtual void write_h(offs_t offset, uint8_t data) override;
 
 	virtual void pcb_reset() override;
-
-protected:
-	// device-level overrides
-	virtual void device_start() override;
 };
 
 
@@ -59,14 +51,14 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(irq_timer_tick);
 
 private:
 	uint16_t m_irq_count;
 	int m_irq_enable, m_irq_toggle;
 
-	static const device_timer_id TIMER_IRQ = 0;
 	emu_timer *irq_timer;
 };
 
@@ -77,24 +69,27 @@ class nes_sunsoft_4_device : public nes_nrom_device
 {
 public:
 	// construction/destruction
-	nes_sunsoft_4_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
+	nes_sunsoft_4_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock);
 
-	virtual uint8_t read_m(offs_t offset) override;
-	virtual void write_m(offs_t offset, uint8_t data) override;
-	void sun4_write(offs_t offset, uint8_t data);
-	virtual void write_h(offs_t offset, uint8_t data) override { sun4_write(offset, data); }
+	virtual u8 read_m(offs_t offset) override;
+	virtual void write_m(offs_t offset, u8 data) override;
+	void sun4_write(offs_t offset, u8 data);
+	virtual void write_h(offs_t offset, u8 data) override { sun4_write(offset, data); }
 
 	virtual void pcb_reset() override;
 
 protected:
-	nes_sunsoft_4_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
+	nes_sunsoft_4_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock);
 
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
-	void sun4_mirror(int mirror, int mirr0, int mirr1);
+	u8 m_wram_enable;
 
-	int m_reg, m_latch1, m_latch2, m_wram_enable;
+private:
+	void sun4_mirror();
+
+	u8 m_reg[3];
 };
 
 
@@ -117,14 +112,14 @@ protected:
 	nes_sunsoft_fme7_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(irq_timer_tick);
 
 private:
 	uint16_t m_irq_count;
 	int m_irq_enable;
 
-	static const device_timer_id TIMER_IRQ = 0;
 	emu_timer *irq_timer;
 
 	uint8_t m_latch;
@@ -143,7 +138,7 @@ public:
 	virtual void write_h(offs_t offset, uint8_t data) override;
 
 protected:
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 private:
 	required_device<ay8910_device> m_ym2149;

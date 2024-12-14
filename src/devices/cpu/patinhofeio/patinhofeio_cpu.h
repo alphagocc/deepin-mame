@@ -41,6 +41,8 @@ enum
 
 class patinho_feio_cpu_device : public cpu_device {
 public:
+	using update_panel_cb = device_delegate<void (uint8_t ACC, uint8_t opcode, uint8_t mem_data, uint16_t mem_addr, uint16_t PC, uint8_t FLAGS, uint16_t RC, uint8_t mode)>;
+
 	// construction/destruction
 	patinho_feio_cpu_device(const machine_config &mconfig, const char *_tag, device_t *_owner, uint32_t _clock);
 
@@ -49,17 +51,19 @@ public:
 	template <std::size_t DevNumber> auto iodev_read() { return m_iodev_read_cb[DevNumber].bind(); }
 	template <std::size_t DevNumber> auto iodev_write() { return m_iodev_write_cb[DevNumber].bind(); }
 	template <std::size_t DevNumber> auto iodev_status() { return m_iodev_status_cb[DevNumber].bind(); }
+	template <typename... T> void set_update_panel_cb(T &&... args) { m_update_panel_cb.set(std::forward<T>(args)...); }
 
 	void transfer_byte_from_external_device(uint8_t channel, uint8_t data);
 	void set_iodev_status(uint8_t channel, bool status) { m_iodev_status[channel] = status; }
 
-	void prog_8bit(address_map &map);
+	void prog_8bit(address_map &map) ATTR_COLD;
 protected:
 
 	virtual void execute_run() override;
 	virtual std::unique_ptr<util::disasm_interface> create_disassembler() override;
 
 	address_space_config m_program_config;
+	update_panel_cb m_update_panel_cb;
 
 	offs_t m_addr;
 	unsigned char m_opcode;
@@ -103,8 +107,8 @@ protected:
 	address_space *m_program;
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; }

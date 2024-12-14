@@ -22,16 +22,15 @@ class bbc_pointer_device :
 	public device_t,
 	public device_bbc_userport_interface
 {
-public:
-	DECLARE_INPUT_CHANGED_MEMBER(pointer_changed);
-
 protected:
 	// construction/destruction
 	bbc_pointer_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(update);
 
 	required_ioport m_pointer_x;
 	required_ioport m_pointer_y;
@@ -41,11 +40,9 @@ protected:
 	int m_xdir, m_ydir;
 
 	// internal quadrature state
-	int m_direction_x, m_direction_y;
-	int m_distance_x, m_distance_y;
+	int m_x, m_y;
 	int m_phase_x, m_phase_y;
 
-	TIMER_CALLBACK_MEMBER(pointer_poll);
 	emu_timer *m_pointer_timer;
 };
 
@@ -61,7 +58,7 @@ public:
 	uint8_t pb_r() override;
 
 	// optional information overrides
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 };
 
 
@@ -76,7 +73,7 @@ public:
 	uint8_t pb_r() override;
 
 	// optional information overrides
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 };
 
 
@@ -91,7 +88,7 @@ public:
 	uint8_t pb_r() override;
 
 	// optional information overrides
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 };
 
 

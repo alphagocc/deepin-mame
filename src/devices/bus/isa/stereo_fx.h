@@ -25,14 +25,12 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// optional information overrides
-	virtual const tiny_rom_entry *device_rom_region() const override;
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 	uint8_t dack_r(int line) override;
 	void dack_w(int line, uint8_t data) override;
@@ -52,6 +50,8 @@ private:
 	emu_timer *m_timer;
 	uint8_t m_t0;
 	uint8_t m_t1;
+
+	TIMER_CALLBACK_MEMBER(clock_tick);
 
 	// mcu ports
 	uint8_t dev_dsp_data_r();
@@ -73,8 +73,8 @@ private:
 	uint8_t invalid_r();
 	void invalid_w(uint8_t data);
 
-	void stereo_fx_io(address_map &map);
-	void stereo_fx_rom(address_map &map);
+	void stereo_fx_io(address_map &map) ATTR_COLD;
+	void stereo_fx_rom(address_map &map) ATTR_COLD;
 };
 
 // device type definition

@@ -8,7 +8,7 @@
 ***************************************************************************/
 
 #include "emu.h"
-#include "machine/at28c64b.h"
+#include "at28c64b.h"
 
 static constexpr int AT28C64B_DATA_BYTES = 0x10000;
 static constexpr int AT28C64B_ID_BYTES = 0x40;
@@ -74,7 +74,7 @@ device_memory_interface::space_config_vector at28c64b_device::memory_space_confi
 
 void at28c64b_device::device_start()
 {
-	m_write_timer = timer_alloc(0);
+	m_write_timer = timer_alloc( FUNC( at28c64b_device::write_complete ), this );
 
 	save_item( NAME(m_a9_12v) );
 	save_item( NAME(m_oe_12v) );
@@ -89,18 +89,14 @@ void at28c64b_device::device_start()
 
 void at28c64b_device::nvram_default()
 {
-	uint16_t default_value = 0xff;
-	for( offs_t offs = 0; offs < AT28C64B_TOTAL_BYTES; offs++ )
-	{
-		space(AS_PROGRAM).write_byte( offs, default_value );
-	}
+	uint16_t const default_value = 0xff;
+	for (offs_t offs = 0; offs < AT28C64B_TOTAL_BYTES; offs++)
+		space(AS_PROGRAM).write_byte(offs, default_value);
 
 	/* populate from a memory region if present */
-	printf("checking for default\n");
 	if (m_default_data.found())
 	{
-		printf("Got default data\n");
-		for( offs_t offs = 0; offs < AT28C64B_DATA_BYTES; offs++ )
+		for (offs_t offs = 0; offs < m_default_data.length(); offs++)
 			space(AS_PROGRAM).write_byte(offs, m_default_data[offs]);
 	}
 }
@@ -111,16 +107,18 @@ void at28c64b_device::nvram_default()
 //  .nv file
 //-------------------------------------------------
 
-void at28c64b_device::nvram_read( emu_file &file )
+bool at28c64b_device::nvram_read(util::read_stream &file)
 {
-	std::vector<uint8_t> buffer( AT28C64B_TOTAL_BYTES );
+	std::vector<uint8_t> buffer(AT28C64B_TOTAL_BYTES);
 
-	file.read( &buffer[0], AT28C64B_TOTAL_BYTES );
+	auto const [err, actual] = util::read(file, &buffer[0], AT28C64B_TOTAL_BYTES);
+	if (err || (actual != AT28C64B_TOTAL_BYTES))
+		return false;
 
-	for( offs_t offs = 0; offs < AT28C64B_TOTAL_BYTES; offs++ )
-	{
-		space(AS_PROGRAM).write_byte( offs, buffer[ offs ] );
-	}
+	for (offs_t offs = 0; offs < AT28C64B_TOTAL_BYTES; offs++)
+		space(AS_PROGRAM).write_byte(offs, buffer[offs]);
+
+	return true;
 }
 
 //-------------------------------------------------
@@ -128,16 +126,15 @@ void at28c64b_device::nvram_read( emu_file &file )
 //  .nv file
 //-------------------------------------------------
 
-void at28c64b_device::nvram_write( emu_file &file )
+bool at28c64b_device::nvram_write(util::write_stream &file)
 {
-	std::vector<uint8_t> buffer ( AT28C64B_TOTAL_BYTES );
+	std::vector<uint8_t> buffer(AT28C64B_TOTAL_BYTES);
 
-	for( offs_t offs = 0; offs < AT28C64B_TOTAL_BYTES; offs++ )
-	{
-		buffer[ offs ] = space(AS_PROGRAM).read_byte( offs );
-	}
+	for (offs_t offs = 0; offs < AT28C64B_TOTAL_BYTES; offs++)
+		buffer[offs] = space(AS_PROGRAM).read_byte(offs);
 
-	file.write( &buffer[0], AT28C64B_TOTAL_BYTES );
+	auto const [err, actual] = util::write(file, &buffer[0], AT28C64B_TOTAL_BYTES);
+	return !err;
 }
 
 
@@ -246,7 +243,7 @@ uint8_t at28c64b_device::read(offs_t offset)
 }
 
 
-WRITE_LINE_MEMBER( at28c64b_device::set_a9_12v )
+void at28c64b_device::set_a9_12v(int state)
 {
 	state &= 1;
 	if( m_a9_12v != state )
@@ -257,7 +254,7 @@ WRITE_LINE_MEMBER( at28c64b_device::set_a9_12v )
 }
 
 
-WRITE_LINE_MEMBER( at28c64b_device::set_oe_12v )
+void at28c64b_device::set_oe_12v(int state)
 {
 	state &= 1;
 	if( m_oe_12v != state )
@@ -268,12 +265,7 @@ WRITE_LINE_MEMBER( at28c64b_device::set_oe_12v )
 }
 
 
-void at28c64b_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER( at28c64b_device::write_complete )
 {
-	switch( id )
-	{
-	case 0:
-		m_last_write = -1;
-		break;
-	}
+	m_last_write = -1;
 }

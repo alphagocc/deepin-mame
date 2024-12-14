@@ -109,7 +109,6 @@ enum
 DEFINE_DEVICE_TYPE(RP5C15, rp5c15_device, "rp5c15", "Ricoh RP5C15 RTC")
 
 
-
 //**************************************************************************
 //  INLINE HELPERS
 //**************************************************************************
@@ -202,18 +201,14 @@ rp5c15_device::rp5c15_device(const machine_config &mconfig, const char *tag, dev
 
 void rp5c15_device::device_start()
 {
-	// resolve callbacks
-	m_out_alarm_cb.resolve_safe();
-	m_out_clkout_cb.resolve_safe();
-
 	// allocate timers
-	m_clock_timer = timer_alloc(TIMER_CLOCK);
+	m_clock_timer = timer_alloc(FUNC(rp5c15_device::advance_1hz_clock), this);
 	m_clock_timer->adjust(attotime::from_hz(clock() / 16384), 0, attotime::from_hz(clock() / 16384));
 
-	m_16hz_timer = timer_alloc(TIMER_16HZ);
+	m_16hz_timer = timer_alloc(FUNC(rp5c15_device::advance_16hz_clock), this);
 	m_16hz_timer->adjust(attotime::from_hz(clock() / 1024), 0, attotime::from_hz(clock() / 1024));
 
-	m_clkout_timer = timer_alloc(TIMER_CLKOUT);
+	m_clkout_timer = timer_alloc(FUNC(rp5c15_device::advance_output_clock), this);
 
 	memset(m_reg, 0, sizeof(m_reg));
 	memset(m_ram, 0, sizeof(m_ram));
@@ -239,33 +234,40 @@ void rp5c15_device::device_start()
 
 
 //-------------------------------------------------
-//  device_timer - handler timer events
+//  advance_1hz_clock -
 //-------------------------------------------------
 
-void rp5c15_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(rp5c15_device::advance_1hz_clock)
 {
-	switch (id)
+	if (m_1hz && (m_mode & MODE_TIMER_EN))
 	{
-	case TIMER_CLOCK:
-		if (m_1hz && (m_mode & MODE_TIMER_EN))
-		{
-			advance_seconds();
-		}
-
-		m_1hz = !m_1hz;
-		set_alarm_line();
-		break;
-
-	case TIMER_16HZ:
-		m_16hz = !m_16hz;
-		set_alarm_line();
-		break;
-
-	case TIMER_CLKOUT:
-		m_clkout = !m_clkout;
-		m_out_clkout_cb(m_clkout);
-		break;
+		advance_seconds();
 	}
+
+	m_1hz = !m_1hz;
+	set_alarm_line();
+}
+
+
+//-------------------------------------------------
+//  advance_16hz_clock -
+//-------------------------------------------------
+
+TIMER_CALLBACK_MEMBER(rp5c15_device::advance_16hz_clock)
+{
+	m_16hz = !m_16hz;
+	set_alarm_line();
+}
+
+
+//-------------------------------------------------
+//  advance_output_clock -
+//-------------------------------------------------
+
+TIMER_CALLBACK_MEMBER(rp5c15_device::advance_output_clock)
+{
+	m_clkout = !m_clkout;
+	m_out_clkout_cb(m_clkout);
 }
 
 
@@ -275,8 +277,12 @@ void rp5c15_device::device_timer(emu_timer &timer, device_timer_id id, int param
 
 void rp5c15_device::rtc_clock_updated(int year, int month, int day, int day_of_week, int hour, int minute, int second)
 {
+	// x68k wants an epoch base (1980-2079) on init, mz2500 do not ("print date$" under basicv2)
+	// megast_* tbd
+	year += m_year_offset;
+
 	m_reg[MODE01][REGISTER_LEAP_YEAR] = year % 4;
-	write_counter(REGISTER_1_YEAR, year);
+	write_counter(REGISTER_1_YEAR, year % 100);
 	write_counter(REGISTER_1_MONTH, month);
 	write_counter(REGISTER_1_DAY, day);
 	m_reg[MODE00][REGISTER_DAY_OF_THE_WEEK] = day_of_week;

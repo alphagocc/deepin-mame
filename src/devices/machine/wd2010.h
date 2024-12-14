@@ -47,10 +47,14 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	TIMER_CALLBACK_MEMBER(command_complete);
+	TIMER_CALLBACK_MEMBER(complete_write);
+	TIMER_CALLBACK_MEMBER(deassert_write);
+	TIMER_CALLBACK_MEMBER(deassert_read);
+	TIMER_CALLBACK_MEMBER(next_sector);
 
 private:
 	void compute_correction(uint8_t data);
@@ -84,10 +88,11 @@ private:
 	uint8_t m_error;
 	uint8_t m_task_file[8];
 
-	emu_timer   *cmd_timer;
-	emu_timer   *complete_write_when_buffer_ready_high;
-	emu_timer   *deassert_write_when_buffer_ready_low;
-	emu_timer   *deassert_read_when_buffer_ready_high;
+	emu_timer   *m_cmd_timer;
+	emu_timer   *m_complete_write_timer;
+	emu_timer   *m_deassert_write_timer;
+	emu_timer   *m_deassert_read_timer;
+	emu_timer   *m_next_sector_timer;
 
 	void complete_write_sector(uint8_t status);
 	void complete_cmd(uint8_t status);

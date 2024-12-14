@@ -2,7 +2,7 @@
 // copyright-holders:Fabio Priuli
 /***************************************************************************
 
-    Konami 056230
+    Konami 056230 LAN controller skeleton device
 
 ***************************************************************************/
 
@@ -15,33 +15,49 @@ class k056230_device : public device_t
 {
 public:
 	// construction/destruction
-	template <typename T>
-	k056230_device(const machine_config &mconfig, const char *tag, device_t *owner, T &&cpu_tag)
-		: k056230_device(mconfig, tag, owner, (uint32_t)0)
-	{
-		m_cpu.set_tag(std::forward<T>(cpu_tag));
-	}
+	k056230_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
 
-	k056230_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
+	auto irq_cb() { return m_irq_cb.bind(); }
 
-	uint32_t lanc_ram_r(offs_t offset, uint32_t mem_mask = ~0);
-	void lanc_ram_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
+	u32 ram_r(offs_t offset, u32 mem_mask = ~0);
+	void ram_w(offs_t offset, u32 data, u32 mem_mask = ~0);
 
-	uint8_t read(offs_t offset);
-	void write(offs_t offset, uint8_t data);
+	virtual void regs_map(address_map &map) ATTR_COLD;
 
 protected:
+	k056230_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
+
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
-private:
+	memory_share_creator<u32> m_ram;
 
-	required_device<cpu_device> m_cpu;
-	uint32_t m_ram[0x2000];
+	devcb_write_line m_irq_cb;
+	int m_irq_state = 0;
+	u8 m_ctrl_reg = 0;
+	u8 m_status = 0;
 };
 
+class k056230_viper_device : public k056230_device
+{
+public:
+	// construction/destruction
+	k056230_viper_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
+
+	virtual void regs_map(address_map &map) override ATTR_COLD;
+
+protected:
+	virtual void device_reset() override ATTR_COLD;
+
+private:
+	u8 m_control = 0;
+	bool m_irq_enable = false;
+	u8 m_unk[2]{};
+};
 
 // device type definition
 DECLARE_DEVICE_TYPE(K056230, k056230_device)
+DECLARE_DEVICE_TYPE(K056230_VIPER, k056230_viper_device)
 
 #endif // MAME_MACHINE_K056230_H

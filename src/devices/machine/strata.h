@@ -21,11 +21,11 @@ public:
 
 protected:
 	// device-level overrides
-	void device_start() override;
+	void device_start() override ATTR_COLD;
 
 	void nvram_default() override;
-	void nvram_read(emu_file &file) override;
-	void nvram_write(emu_file &file) override;
+	bool nvram_read(util::read_stream &file) override;
+	bool nvram_write(util::write_stream &file) override;
 
 private:
 

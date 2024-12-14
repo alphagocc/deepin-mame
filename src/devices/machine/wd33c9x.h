@@ -32,7 +32,7 @@ public:
 	void indir_reg_w(uint8_t data);
 
 	// Master Reset (MR) Interface
-	DECLARE_WRITE_LINE_MEMBER(reset_w);
+	void reset_w(int state);
 
 	// DMA Interface (for use with DRQ)
 	uint8_t dma_r();
@@ -41,9 +41,10 @@ public:
 protected:
 	wd33c9x_base_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(update_step);
 
 	virtual void scsi_ctrl_changed() override;
 

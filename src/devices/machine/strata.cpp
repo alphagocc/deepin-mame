@@ -66,9 +66,11 @@ void strataflash_device::nvram_default()
 //  .nv file
 //-------------------------------------------------
 
-void strataflash_device::nvram_read(emu_file &file)
+bool strataflash_device::nvram_read(util::read_stream &file)
 {
-	file.read(m_flashmemory.get(), COMPLETE_SIZE);
+	auto const [err, actual] = read(file, m_flashmemory.get(), COMPLETE_SIZE);
+	if (err || (COMPLETE_SIZE != actual))
+		return false;
 
 	// TODO
 
@@ -111,6 +113,8 @@ void strataflash_device::nvram_read(emu_file &file)
 
 	return 0;
 	*/
+
+	return true;
 }
 
 //-------------------------------------------------
@@ -118,7 +122,7 @@ void strataflash_device::nvram_read(emu_file &file)
 //  .nv file
 //-------------------------------------------------
 
-void strataflash_device::nvram_write(emu_file &file)
+bool strataflash_device::nvram_write(util::write_stream &file)
 {
 	// TODO
 
@@ -172,7 +176,8 @@ void strataflash_device::nvram_write(emu_file &file)
 	return 0;
 	*/
 
-	file.write(m_flashmemory.get(), COMPLETE_SIZE);
+	auto const [err, actual] = write(file, m_flashmemory.get(), COMPLETE_SIZE);
+	return !err;
 }
 
 //-------------------------------------------------

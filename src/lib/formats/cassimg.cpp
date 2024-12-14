@@ -11,7 +11,7 @@
 #include "cassimg.h"
 #include "imageutl.h"
 
-#include "corealloc.h" // make_unique_clear
+#include "corealloc.h" // util::make_unique_clear
 
 #include <algorithm>
 #include <cassert>
@@ -191,7 +191,7 @@ cassette_image::error cassette_image::lookup_sample(int channel, size_t sample, 
 		m_blocks.resize(sample_blocknum + 1);
 
 	if (!m_blocks[sample_blocknum])
-		m_blocks[sample_blocknum] = make_unique_clear<int32_t []>(SAMPLES_PER_BLOCK);
+		m_blocks[sample_blocknum] = util::make_unique_clear<int32_t []>(SAMPLES_PER_BLOCK);
 
 	ptr = &m_blocks[sample_blocknum][sample_index];
 	return error::SUCCESS;
@@ -366,8 +366,7 @@ void cassette_image::change(util::random_read_write::ptr &&io, const Format *for
 
 void cassette_image::image_read(void *buffer, uint64_t offset, size_t length)
 {
-	size_t actual;
-	m_io->read_at(offset, buffer, length, actual);
+	/*auto const [err, actual] =*/ read_at(*m_io, offset, buffer, length); // FIXME: check for errors and premature EOF
 }
 
 
@@ -383,8 +382,7 @@ uint8_t cassette_image::image_read_byte(uint64_t offset)
 
 void cassette_image::image_write(const void *buffer, uint64_t offset, size_t length)
 {
-	size_t actual;
-	m_io->write_at(offset, buffer, length, actual);
+	/*auto const [err, actual] =*/ write_at(*m_io, offset, buffer, length); // FIXME: check for errors
 }
 
 

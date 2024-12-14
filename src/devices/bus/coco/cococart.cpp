@@ -44,6 +44,7 @@
 #include "coco_dcmodem.h"
 #include "coco_fdc.h"
 #include "coco_gmc.h"
+#include "coco_ide.h"
 #include "coco_max.h"
 #include "coco_midi.h"
 #include "coco_multi.h"
@@ -72,7 +73,6 @@
     PARAMETERS
 ***************************************************************************/
 
-//#define LOG_GENERAL   (1U << 0) //defined in logmacro.h already
 #define LOG_CART (1U << 1) // shows cart line changes
 #define LOG_NMI  (1U << 2) // shows switch changes
 #define LOG_HALT (1U << 3) // shows switch changes
@@ -88,14 +88,6 @@
 /***************************************************************************
     CONSTANTS
 ***************************************************************************/
-
-enum
-{
-	TIMER_CART,
-	TIMER_NMI,
-	TIMER_HALT
-};
-
 
 // definitions of RPK PCBs in layout.xml
 static const char *coco_rpk_pcbdefs[] =
@@ -125,13 +117,15 @@ DEFINE_DEVICE_TYPE(COCOCART_SLOT, cococart_slot_device, "cococart_slot", "CoCo C
 //  LIVE DEVICE
 //**************************************************************************
 
+ALLOW_SAVE_TYPE(cococart_slot_device::line_value);
+
 //-------------------------------------------------
 //  cococart_slot_device - constructor
 //-------------------------------------------------
 cococart_slot_device::cococart_slot_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock) :
 	device_t(mconfig, COCOCART_SLOT, tag, owner, clock),
 	device_single_card_slot_interface<device_cococart_interface>(mconfig, *this),
-	device_image_interface(mconfig, *this),
+	device_cartrom_image_interface(mconfig, *this),
 	m_cart_callback(*this),
 	m_nmi_callback(*this),
 	m_halt_callback(*this), m_cart(nullptr)
@@ -146,11 +140,11 @@ cococart_slot_device::cococart_slot_device(const machine_config &mconfig, const 
 
 void cococart_slot_device::device_start()
 {
-	for(int i=0; i<TIMER_POOL; i++ )
+	for(int i=0; i < TIMER_POOL; i++ )
 	{
-		m_cart_line.timer[i]    = timer_alloc(TIMER_CART);
-		m_nmi_line.timer[i]     = timer_alloc(TIMER_NMI);
-		m_halt_line.timer[i]    = timer_alloc(TIMER_HALT);
+		m_cart_line.timer[i]    = timer_alloc(FUNC(cococart_slot_device::cart_line_timer_tick), this);
+		m_nmi_line.timer[i]     = timer_alloc(FUNC(cococart_slot_device::nmi_line_timer_tick), this);
+		m_halt_line.timer[i]    = timer_alloc(FUNC(cococart_slot_device::halt_line_timer_tick), this);
 	}
 
 	m_cart_line.timer_index     = 0;
@@ -158,7 +152,6 @@ void cococart_slot_device::device_start()
 	m_cart_line.value           = line_value::CLEAR;
 	m_cart_line.line            = 0;
 	m_cart_line.q_count         = 0;
-	m_cart_callback.resolve();
 	m_cart_line.callback = &m_cart_callback;
 
 	m_nmi_line.timer_index      = 0;
@@ -166,7 +159,6 @@ void cococart_slot_device::device_start()
 	m_nmi_line.value            = line_value::CLEAR;
 	m_nmi_line.line             = 0;
 	m_nmi_line.q_count          = 0;
-	m_nmi_callback.resolve();
 	m_nmi_line.callback = &m_nmi_callback;
 
 	m_halt_line.timer_index     = 0;
@@ -174,35 +166,61 @@ void cococart_slot_device::device_start()
 	m_halt_line.value           = line_value::CLEAR;
 	m_halt_line.line            = 0;
 	m_halt_line.q_count         = 0;
-	m_halt_callback.resolve();
 	m_halt_line.callback = &m_halt_callback;
 
 	m_cart = get_card_device();
+
+	save_item(STRUCT_MEMBER(m_cart_line, timer_index));
+	save_item(STRUCT_MEMBER(m_cart_line, delay));
+	save_item(STRUCT_MEMBER(m_cart_line, value));
+	save_item(STRUCT_MEMBER(m_cart_line, line));
+	save_item(STRUCT_MEMBER(m_cart_line, q_count));
+
+	save_item(STRUCT_MEMBER(m_nmi_line, timer_index));
+	save_item(STRUCT_MEMBER(m_nmi_line, delay));
+	save_item(STRUCT_MEMBER(m_nmi_line, value));
+	save_item(STRUCT_MEMBER(m_nmi_line, line));
+	save_item(STRUCT_MEMBER(m_nmi_line, q_count));
+
+	save_item(STRUCT_MEMBER(m_halt_line, timer_index));
+	save_item(STRUCT_MEMBER(m_halt_line, delay));
+	save_item(STRUCT_MEMBER(m_halt_line, value));
+	save_item(STRUCT_MEMBER(m_halt_line, line));
+	save_item(STRUCT_MEMBER(m_halt_line, q_count));
 }
 
 
 
 //-------------------------------------------------
-//  device_timer - handle timer callbacks
+//  cart_line_timer_tick - update the output
+//  value for the cart's line to PIA1 CB1
 //-------------------------------------------------
 
-void cococart_slot_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(cococart_slot_device::cart_line_timer_tick)
 {
-	switch(id)
-	{
-		case TIMER_CART:
-			set_line(line::CART, m_cart_line, (line_value) param);
-			break;
-
-		case TIMER_NMI:
-			set_line(line::NMI, m_nmi_line, (line_value) param);
-			break;
-
-		case TIMER_HALT:
-			set_line(line::HALT, m_halt_line, (line_value) param);
-			break;
-	}
+	set_line(line::CART, m_cart_line, (line_value) param);
 }
+
+//-------------------------------------------------
+//  nmi_line_timer_tick - update the output
+//  value sent to the CPU's NMI line
+//-------------------------------------------------
+
+TIMER_CALLBACK_MEMBER(cococart_slot_device::nmi_line_timer_tick)
+{
+	set_line(line::NMI, m_nmi_line, (line_value) param);
+}
+
+//-------------------------------------------------
+//  halt_line_timer_tick - update the output
+//  value sent to the CPU's HALT line
+//-------------------------------------------------
+
+TIMER_CALLBACK_MEMBER(cococart_slot_device::halt_line_timer_tick)
+{
+	set_line(line::HALT, m_halt_line, (line_value) param);
+}
+
 
 
 //-------------------------------------------------
@@ -324,9 +342,8 @@ void cococart_slot_device::set_line(line ln, coco_cartridge_line &line, cococart
 				break;
 		}
 
-		/* invoke the callback, if present */
-		if (!(*line.callback).isnull())
-			(*line.callback)(line.line);
+		/* invoke the callback */
+		(*line.callback)(line.line);
 	}
 }
 
@@ -553,7 +570,7 @@ static std::error_condition read_coco_rpk(std::unique_ptr<util::random_read> &&s
 //  call_load
 //-------------------------------------------------
 
-image_init_result cococart_slot_device::call_load()
+std::pair<std::error_condition, std::string> cococart_slot_device::call_load()
 {
 	if (m_cart)
 	{
@@ -575,7 +592,7 @@ image_init_result cococart_slot_device::call_load()
 			if (!err)
 				err = read_coco_rpk(std::move(proxy), base, cart_length, read_length);
 			if (err)
-				return image_init_result::FAIL;
+				return std::make_pair(err, std::string());
 		}
 		else
 		{
@@ -590,7 +607,7 @@ image_init_result cococart_slot_device::call_load()
 			read_length += len;
 		}
 	}
-	return image_init_result::PASS;
+	return std::make_pair(std::error_condition(), std::string());
 }
 
 
@@ -609,7 +626,7 @@ std::string cococart_slot_device::get_default_card_software(get_default_card_sof
 		// RPK file
 		rpk_file::ptr file;
 		util::core_file::ptr proxy;
-		std::error_condition err = util::core_file::open_proxy(image_core_file(), proxy);
+		std::error_condition err = util::core_file::open_proxy(*hook.image_file(), proxy);
 		if (!err)
 			err = read_coco_rpk(std::move(proxy), file);
 		if (!err)
@@ -635,7 +652,7 @@ template class device_finder<device_cococart_interface, true>;
 
 device_cococart_interface::device_cococart_interface(const machine_config &mconfig, device_t &device)
 	: device_interface(device, "cococart")
-	, m_owning_slot(nullptr)
+	, m_owning_slot(dynamic_cast<cococart_slot_device *>(device.owner()))
 	, m_host(nullptr)
 {
 }
@@ -656,7 +673,6 @@ device_cococart_interface::~device_cococart_interface()
 
 void device_cococart_interface::interface_config_complete()
 {
-	m_owning_slot = dynamic_cast<cococart_slot_device *>(device().owner());
 	m_host = m_owning_slot
 			? dynamic_cast<device_cococart_host_interface *>(m_owning_slot->owner())
 			: nullptr;
@@ -814,6 +830,7 @@ void coco_cart_add_basic_devices(device_slot_interface &device)
 	device.option_add("ccpsg", COCO_PSG);
 	device.option_add("dcmodem", COCO_DCMODEM);
 	device.option_add("gmc", COCO_PAK_GMC);
+	device.option_add("ide", COCO_IDE);
 	device.option_add("max", COCO_PAK_MAX);
 	device.option_add("midi", COCO_MIDI);
 	device.option_add("orch90", COCO_ORCH90);
@@ -838,12 +855,10 @@ void coco_cart_add_fdcs(device_slot_interface &device)
 {
 	// FDCs are optional because if they are on a Multi-Pak interface, they must
 	// be on Slot 4
-	device.option_add("cc2hdb1", COCO2_HDB1);
-	device.option_add("cc3hdb1", COCO3_HDB1);
 	device.option_add("cd6809_fdc", CD6809_FDC);
 	device.option_add("cp450_fdc", CP450_FDC);
 	device.option_add("fdc", COCO_FDC);
-	device.option_add("fdcv11", COCO_FDC_V11);
+	device.option_add("scii", COCO_SCII);
 }
 
 

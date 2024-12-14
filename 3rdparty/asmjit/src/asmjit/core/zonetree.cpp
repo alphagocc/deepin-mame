@@ -1,25 +1,7 @@
-// AsmJit - Machine code generation for C++
+// This file is part of AsmJit project <https://asmjit.com>
 //
-//  * Official AsmJit Home Page: https://asmjit.com
-//  * Official Github Repository: https://github.com/asmjit/asmjit
-//
-// Copyright (c) 2008-2020 The AsmJit Authors
-//
-// This software is provided 'as-is', without any express or implied
-// warranty. In no event will the authors be held liable for any damages
-// arising from the use of this software.
-//
-// Permission is granted to anyone to use this software for any purpose,
-// including commercial applications, and to alter it and redistribute it
-// freely, subject to the following restrictions:
-//
-// 1. The origin of this software must not be misrepresented; you must not
-//    claim that you wrote the original software. If you use this software
-//    in a product, an acknowledgment in the product documentation would be
-//    appreciated but is not required.
-// 2. Altered source versions must be plainly marked as such, and must not be
-//    misrepresented as being the original software.
-// 3. This notice may not be removed or altered from any source distribution.
+// See asmjit.h or LICENSE.md for license and copyright information
+// SPDX-License-Identifier: Zlib
 
 #include "../core/api-build_p.h"
 #include "../core/support.h"
@@ -28,9 +10,8 @@
 
 ASMJIT_BEGIN_NAMESPACE
 
-// ============================================================================
-// [asmjit::ZoneTree - Unit]
-// ============================================================================
+// ZoneTreeBase - Tests
+// ====================
 
 #if defined(ASMJIT_TEST)
 template<typename NodeT>
@@ -38,7 +19,7 @@ struct ZoneRBUnit {
   typedef ZoneTree<NodeT> Tree;
 
   static void verifyTree(Tree& tree) noexcept {
-    EXPECT(checkHeight(static_cast<NodeT*>(tree._root)) > 0);
+    EXPECT_GT(checkHeight(static_cast<NodeT*>(tree._root)), 0);
   }
 
   // Check whether the Red-Black tree is valid.
@@ -49,17 +30,16 @@ struct ZoneRBUnit {
     NodeT* rn = node->right();
 
     // Invalid tree.
-    EXPECT(ln == nullptr || *ln < *node);
-    EXPECT(rn == nullptr || *rn > *node);
+    EXPECT_TRUE(ln == nullptr || *ln < *node);
+    EXPECT_TRUE(rn == nullptr || *rn > *node);
 
     // Red violation.
-    EXPECT(!node->isRed() ||
-          (!ZoneTreeNode::_isValidRed(ln) && !ZoneTreeNode::_isValidRed(rn)));
+    EXPECT_TRUE(!node->isRed() || (!ZoneTreeNode::_isValidRed(ln) && !ZoneTreeNode::_isValidRed(rn)));
 
     // Black violation.
     int lh = checkHeight(ln);
     int rh = checkHeight(rn);
-    EXPECT(!lh || !rh || lh == rh);
+    EXPECT_TRUE(!lh || !rh || lh == rh);
 
     // Only count black links.
     return (lh && rh) ? lh + !node->isRed() : 0;
@@ -102,8 +82,8 @@ UNIT(zone_rbtree) {
 
     for (key = 0; key < count; key++) {
       node = rbTree.get(key);
-      EXPECT(node != nullptr);
-      EXPECT(node->_key == key);
+      EXPECT_NOT_NULL(node);
+      EXPECT_EQ(node->_key, key);
     }
 
     node = rbTree.get(--count);
@@ -111,7 +91,7 @@ UNIT(zone_rbtree) {
     ZoneRBUnit<MyRBNode>::verifyTree(rbTree);
   } while (count);
 
-  EXPECT(rbTree.empty());
+  EXPECT_TRUE(rbTree.empty());
 }
 #endif
 

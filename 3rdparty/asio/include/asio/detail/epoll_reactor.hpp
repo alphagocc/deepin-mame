@@ -2,7 +2,7 @@
 // detail/epoll_reactor.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -25,6 +25,7 @@
 #include "asio/detail/object_pool.hpp"
 #include "asio/detail/op_queue.hpp"
 #include "asio/detail/reactor_op.hpp"
+#include "asio/detail/scheduler_task.hpp"
 #include "asio/detail/select_interrupter.hpp"
 #include "asio/detail/socket_types.hpp"
 #include "asio/detail/timer_queue_base.hpp"
@@ -32,13 +33,18 @@
 #include "asio/detail/wait_op.hpp"
 #include "asio/execution_context.hpp"
 
+#if defined(ASIO_HAS_TIMERFD)
+# include <sys/timerfd.h>
+#endif // defined(ASIO_HAS_TIMERFD)
+
 #include "asio/detail/push_options.hpp"
 
 namespace asio {
 namespace detail {
 
 class epoll_reactor
-  : public execution_context_service_base<epoll_reactor>
+  : public execution_context_service_base<epoll_reactor>,
+    public scheduler_task
 {
 private:
   // The mutex type used by this reactor.
@@ -67,6 +73,7 @@ public:
 
     ASIO_DECL descriptor_state(bool locking);
     void set_ready_events(uint32_t events) { task_result_ = events; }
+    void add_ready_events(uint32_t events) { task_result_ |= events; }
     ASIO_DECL operation* perform_io(uint32_t events);
     ASIO_DECL static void do_complete(
         void* owner, operation* base,
@@ -109,16 +116,30 @@ public:
       per_descriptor_data& source_descriptor_data);
 
   // Post a reactor operation for immediate completion.
-  void post_immediate_completion(reactor_op* op, bool is_continuation)
-  {
-    scheduler_.post_immediate_completion(op, is_continuation);
-  }
+  void post_immediate_completion(operation* op, bool is_continuation) const;
+
+  // Post a reactor operation for immediate completion.
+  ASIO_DECL static void call_post_immediate_completion(
+      operation* op, bool is_continuation, const void* self);
 
   // Start a new operation. The reactor operation will be performed when the
   // given descriptor is flagged as ready, or an error has occurred.
   ASIO_DECL void start_op(int op_type, socket_type descriptor,
       per_descriptor_data& descriptor_data, reactor_op* op,
-      bool is_continuation, bool allow_speculative);
+      bool is_continuation, bool allow_speculative,
+      void (*on_immediate)(operation*, bool, const void*),
+      const void* immediate_arg);
+
+  // Start a new operation. The reactor operation will be performed when the
+  // given descriptor is flagged as ready, or an error has occurred.
+  void start_op(int op_type, socket_type descriptor,
+      per_descriptor_data& descriptor_data, reactor_op* op,
+      bool is_continuation, bool allow_speculative)
+  {
+    start_op(op_type, descriptor, descriptor_data,
+        op, is_continuation, allow_speculative,
+        &epoll_reactor::call_post_immediate_completion, this);
+  }
 
   // Cancel all operations associated with the given descriptor. The
   // handlers associated with the descriptor will be invoked with the
@@ -126,14 +147,29 @@ public:
   ASIO_DECL void cancel_ops(socket_type descriptor,
       per_descriptor_data& descriptor_data);
 
+  // Cancel all operations associated with the given descriptor and key. The
+  // handlers associated with the descriptor will be invoked with the
+  // operation_aborted error.
+  ASIO_DECL void cancel_ops_by_key(socket_type descriptor,
+      per_descriptor_data& descriptor_data,
+      int op_type, void* cancellation_key);
+
   // Cancel any operations that are running against the descriptor and remove
-  // its registration from the reactor.
+  // its registration from the reactor. The reactor resources associated with
+  // the descriptor must be released by calling cleanup_descriptor_data.
   ASIO_DECL void deregister_descriptor(socket_type descriptor,
       per_descriptor_data& descriptor_data, bool closing);
 
-  // Remote the descriptor's registration from the reactor.
+  // Remove the descriptor's registration from the reactor. The reactor
+  // resources associated with the descriptor must be released by calling
+  // cleanup_descriptor_data.
   ASIO_DECL void deregister_internal_descriptor(
       socket_type descriptor, per_descriptor_data& descriptor_data);
+
+  // Perform any post-deregistration cleanup tasks associated with the
+  // descriptor data.
+  ASIO_DECL void cleanup_descriptor_data(
+      per_descriptor_data& descriptor_data);
 
   // Add a new timer queue to the reactor.
   template <typename Time_Traits>
@@ -156,6 +192,12 @@ public:
   std::size_t cancel_timer(timer_queue<Time_Traits>& queue,
       typename timer_queue<Time_Traits>::per_timer_data& timer,
       std::size_t max_cancelled = (std::numeric_limits<std::size_t>::max)());
+
+  // Cancel the timer operations associated with the given key.
+  template <typename Time_Traits>
+  void cancel_timer_by_key(timer_queue<Time_Traits>& queue,
+      typename timer_queue<Time_Traits>::per_timer_data* timer,
+      void* cancellation_key);
 
   // Move the timer operations associated with the given timer.
   template <typename Time_Traits>

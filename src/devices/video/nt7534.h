@@ -46,17 +46,17 @@ protected:
 	nt7534_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(clear_busy_flag);
+
 private:
 	// internal helper
 	void set_busy_flag(uint16_t usec);
 	void update_nibble(int rs, int rw);
 
 	// internal state
-	static constexpr device_timer_id TIMER_BUSY = 0;
-
 	emu_timer * m_busy_timer;
 
 	pixel_update_delegate m_pixel_update_cb; // pixel update callback

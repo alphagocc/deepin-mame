@@ -16,11 +16,14 @@ To set the folders where the data plugin looks for supported files, choose
 **Configure Directories**, and then choose **DATs**.  You can also set the
 ``historypath`` option in your **ui.ini** file.
 
+Loading large data files like **history.xml** can take quite a while, so please
+be patient the first time you start MAME after updating or adding new data
+files.
+
 The following files are supported:
 
 history.xml
-    From `Gaming-History <https://www.arcade-history.com/>`_ (formerly
-    Arcade-History)
+    From Gaming-History (formerly Arcade-History)
 mameinfo.dat
     From `MASH’s MAMEINFO <https://mameinfo.mameworld.info/>`_
 messinfo.dat
@@ -49,6 +52,7 @@ plugin can also show high scores from non-volatile memory or saved by the
 Note that you can only use a single file of each type at a time.  You cannot,
 for example, use the English and Japanese **mameinfo.dat** files simultaneously.
 
-The data plugin creates a **history.db** file in the first configured DATs
-folder.  This file stores the information from the support files in a format
-suitable for rapid loading.  It uses the SQLite3 database format.
+The data plugin creates a **history.db** file in the **data** folder in the
+plugin data folder (see the :ref:`homepath option <mame-commandline-homepath>`).
+This file stores the information from the support files in a format suitable for
+rapid loading.  It uses the SQLite3 database format.

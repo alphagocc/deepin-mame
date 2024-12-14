@@ -7,7 +7,6 @@
 */
 
 #include "emu.h"
-#include "debugger.h"
 #include "pdp8.h"
 #include "pdp8dasm.h"
 
@@ -178,17 +177,6 @@ uint32_t pdp8_device::execute_min_cycles() const noexcept
 uint32_t pdp8_device::execute_max_cycles() const noexcept
 {
 	return 3; // TODO
-}
-
-
-//-------------------------------------------------
-//  execute_input_lines - return the number of
-//  input/interrupt lines
-//-------------------------------------------------
-
-uint32_t pdp8_device::execute_input_lines() const noexcept
-{
-	return 0; // TODO
 }
 
 

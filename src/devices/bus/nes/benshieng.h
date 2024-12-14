@@ -14,21 +14,18 @@ class nes_benshieng_device : public nes_nrom_device
 {
 public:
 	// construction/destruction
-	nes_benshieng_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
+	nes_benshieng_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock);
 
-	virtual void write_h(offs_t offset, uint8_t data) override;
+	virtual void write_h(offs_t offset, u8 data) override;
 
 	virtual void pcb_reset() override;
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 private:
-	void update_banks();
-	uint8_t m_dipsetting;
-	uint8_t m_mmc_prg_bank[4];
-	uint8_t m_mmc_vrom_bank[4];
+	u8 m_dipsetting;
 };
 
 

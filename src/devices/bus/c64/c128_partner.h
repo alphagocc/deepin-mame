@@ -31,15 +31,14 @@ public:
 	c128_partner_cartridge_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 	// optional information overrides
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 
-	DECLARE_WRITE_LINE_MEMBER( nmi_w );
+	void nmi_w(int state);
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_c64_expansion_card_interface overrides
 	virtual uint8_t c64_cd_r(offs_t offset, uint8_t data, int sphi2, int ba, int roml, int romh, int io1, int io2) override;
@@ -47,6 +46,8 @@ protected:
 
 	// device_vcs_control_port_interface overrides
 	virtual void vcs_joy_w(uint8_t data);
+
+	TIMER_CALLBACK_MEMBER(update_joyb2);
 
 private:
 	memory_share_creator<uint8_t> m_ram;

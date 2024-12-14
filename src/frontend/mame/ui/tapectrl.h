@@ -8,15 +8,20 @@
 
 ***************************************************************************/
 
-#pragma once
-
 #ifndef MAME_FRONTEND_UI_TAPECTRL_H
 #define MAME_FRONTEND_UI_TAPECTRL_H
 
-#include "imagedev/cassette.h"
+#pragma once
+
 #include "ui/devctrl.h"
 
+#include "imagedev/cassette.h"
+
+#include "notifier.h"
+
+
 namespace ui {
+
 class menu_tape_control : public menu_device_control<cassette_image_device>
 {
 public:
@@ -24,12 +29,13 @@ public:
 	virtual ~menu_tape_control() override;
 
 private:
-	virtual void populate(float &customtop, float &custombottom) override;
-	virtual void handle() override;
+	virtual void populate() override;
+	virtual bool handle(event const *ev) override;
 
-	static void get_time_string(std::string &dest, cassette_image_device *cassette, int *curpos, int *endpos);
+	util::notifier_subscription m_notifier;
+	int m_slider_item_index;
 };
 
 } // namespace ui
 
-#endif /* MAME_FRONTEND_UI_TAPECTRL_H */
+#endif // MAME_FRONTEND_UI_TAPECTRL_H

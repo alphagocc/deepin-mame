@@ -19,12 +19,13 @@
 class input_merger_device : public device_t
 {
 public:
+	virtual ~input_merger_device() override;
+
 	// configuration
 	auto output_handler() { return m_output_handler.bind(); }
-	auto &initial_state(u32 val) { m_initval = val; return *this; } // initial input pin(s) state, be wary about the unused pins
 
 	// input lines
-	template <unsigned Bit> DECLARE_WRITE_LINE_MEMBER(in_w) { static_assert(Bit < 32, "invalid bit"); machine().scheduler().synchronize(timer_expired_delegate(FUNC(input_merger_device::update_state), this), (Bit << 1) | (state ? 1U : 0U)); }
+	template <unsigned Bit> void in_w(int state) { static_assert(Bit < 32, "invalid bit"); machine().scheduler().synchronize(timer_expired_delegate(FUNC(input_merger_device::update_state), this), (Bit << 1) | (state ? 1U : 0U)); }
 	template <unsigned Bit> void in_set(u8 data = 0) { in_w<Bit>(1); }
 	template <unsigned Bit> void in_clear(u8 data = 0) { in_w<Bit>(0); }
 
@@ -39,16 +40,15 @@ protected:
 			u32 initval,
 			u32 xorval,
 			int active);
-	virtual ~input_merger_device() override;
 
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 	TIMER_CALLBACK_MEMBER(update_state);
 
 	devcb_write_line m_output_handler;
 
-	u32 m_initval;
+	u32 const m_initval;
 	u32 const m_xorval;
 	int const m_active;
 	u32 m_state;

@@ -2,7 +2,7 @@
 // system_timer.cpp
 // ~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -21,25 +21,15 @@
 // Test that header file is self-contained.
 #include "asio/system_timer.hpp"
 
-#include "unit_test.hpp"
-
-#if defined(ASIO_HAS_STD_CHRONO)
-
+#include <functional>
+#include "asio/bind_cancellation_slot.hpp"
+#include "asio/cancellation_signal.hpp"
 #include "asio/executor_work_guard.hpp"
 #include "asio/io_context.hpp"
 #include "asio/thread.hpp"
+#include "unit_test.hpp"
 
-#if defined(ASIO_HAS_BOOST_BIND)
-# include <boost/bind.hpp>
-#else // defined(ASIO_HAS_BOOST_BIND)
-# include <functional>
-#endif // defined(ASIO_HAS_BOOST_BIND)
-
-#if defined(ASIO_HAS_BOOST_BIND)
-namespace bindns = boost;
-#else // defined(ASIO_HAS_BOOST_BIND)
 namespace bindns = std;
-#endif // defined(ASIO_HAS_BOOST_BIND)
 
 void increment(int* count)
 {
@@ -90,12 +80,11 @@ void system_timer_test()
 {
   using asio::chrono::seconds;
   using asio::chrono::microseconds;
-#if !defined(ASIO_HAS_BOOST_BIND)
-  using std::placeholders::_1;
-  using std::placeholders::_2;
-#endif // !defined(ASIO_HAS_BOOST_BIND)
+  using bindns::placeholders::_1;
+  using bindns::placeholders::_2;
 
   asio::io_context ioc;
+  const asio::io_context::executor_type ioc_ex = ioc.get_executor();
   int count = 0;
 
   asio::system_timer::time_point start = now();
@@ -110,7 +99,7 @@ void system_timer_test()
 
   start = now();
 
-  asio::system_timer t2(ioc, seconds(1) + microseconds(500000));
+  asio::system_timer t2(ioc_ex, seconds(1) + microseconds(500000));
   t2.wait();
 
   // The timer must block until after its expiry time.
@@ -236,11 +225,9 @@ struct timer_handler
 {
   timer_handler() {}
   void operator()(const asio::error_code&) {}
-#if defined(ASIO_HAS_MOVE)
   timer_handler(timer_handler&&) {}
 private:
   timer_handler(const timer_handler&);
-#endif // defined(ASIO_HAS_MOVE)
 };
 
 void system_timer_cancel_test()
@@ -271,21 +258,77 @@ struct custom_allocation_timer_handler
   custom_allocation_timer_handler(int* count) : count_(count) {}
   void operator()(const asio::error_code&) {}
   int* count_;
+
+  template <typename T>
+  struct allocator
+  {
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef T value_type;
+
+    template <typename U>
+    struct rebind
+    {
+      typedef allocator<U> other;
+    };
+
+    explicit allocator(int* count) noexcept
+      : count_(count)
+    {
+    }
+
+    allocator(const allocator& other) noexcept
+      : count_(other.count_)
+    {
+    }
+
+    template <typename U>
+    allocator(const allocator<U>& other) noexcept
+      : count_(other.count_)
+    {
+    }
+
+    pointer allocate(size_type n, const void* = 0)
+    {
+      ++(*count_);
+      return static_cast<T*>(::operator new(sizeof(T) * n));
+    }
+
+    void deallocate(pointer p, size_type)
+    {
+      --(*count_);
+      ::operator delete(p);
+    }
+
+    size_type max_size() const
+    {
+      return ~size_type(0);
+    }
+
+    void construct(pointer p, const T& v)
+    {
+      new (p) T(v);
+    }
+
+    void destroy(pointer p)
+    {
+      p->~T();
+    }
+
+    int* count_;
+  };
+
+  typedef allocator<int> allocator_type;
+
+  allocator_type get_allocator() const noexcept
+  {
+    return allocator_type(count_);
+  }
 };
-
-void* asio_handler_allocate(std::size_t size,
-    custom_allocation_timer_handler* handler)
-{
-  ++(*handler->count_);
-  return ::operator new(size);
-}
-
-void asio_handler_deallocate(void* pointer, std::size_t,
-    custom_allocation_timer_handler* handler)
-{
-  --(*handler->count_);
-  ::operator delete(pointer);
-}
 
 void system_timer_custom_allocation_test()
 {
@@ -349,7 +392,6 @@ void system_timer_thread_test()
   ASIO_CHECK(count == 1);
 }
 
-#if defined(ASIO_HAS_MOVE)
 asio::system_timer make_timer(asio::io_context& ioc, int* count)
 {
   asio::system_timer t(ioc);
@@ -357,11 +399,22 @@ asio::system_timer make_timer(asio::io_context& ioc, int* count)
   t.async_wait(bindns::bind(increment, count));
   return t;
 }
-#endif
+
+typedef asio::basic_waitable_timer<
+    asio::system_timer::clock_type,
+    asio::system_timer::traits_type,
+    asio::io_context::executor_type> io_context_system_timer;
+
+io_context_system_timer make_convertible_timer(asio::io_context& ioc, int* count)
+{
+  io_context_system_timer t(ioc);
+  t.expires_after(asio::chrono::seconds(1));
+  t.async_wait(bindns::bind(increment, count));
+  return t;
+}
 
 void system_timer_move_test()
 {
-#if defined(ASIO_HAS_MOVE)
   asio::io_context io_context1;
   asio::io_context io_context2;
   int count = 0;
@@ -379,7 +432,60 @@ void system_timer_move_test()
   io_context1.run();
 
   ASIO_CHECK(count == 2);
-#endif // defined(ASIO_HAS_MOVE)
+
+  asio::system_timer t4 = make_convertible_timer(io_context1, &count);
+  asio::system_timer t5 = make_convertible_timer(io_context2, &count);
+  asio::system_timer t6 = std::move(t4);
+
+  t2 = std::move(t4);
+
+  io_context2.restart();
+  io_context2.run();
+
+  ASIO_CHECK(count == 3);
+
+  io_context1.restart();
+  io_context1.run();
+
+  ASIO_CHECK(count == 4);
+}
+
+void system_timer_op_cancel_test()
+{
+  asio::cancellation_signal cancel_signal;
+  asio::io_context ioc;
+  int count = 0;
+
+  asio::system_timer timer(ioc, asio::chrono::seconds(10));
+
+  timer.async_wait(bindns::bind(increment, &count));
+
+  timer.async_wait(
+      asio::bind_cancellation_slot(
+        cancel_signal.slot(),
+        bindns::bind(increment, &count)));
+
+  timer.async_wait(bindns::bind(increment, &count));
+
+  ioc.poll();
+
+  ASIO_CHECK(count == 0);
+  ASIO_CHECK(!ioc.stopped());
+
+  cancel_signal.emit(asio::cancellation_type::all);
+
+  ioc.run_one();
+  ioc.poll();
+
+  ASIO_CHECK(count == 1);
+  ASIO_CHECK(!ioc.stopped());
+
+  timer.cancel();
+
+  ioc.run();
+
+  ASIO_CHECK(count == 3);
+  ASIO_CHECK(ioc.stopped());
 }
 
 ASIO_TEST_SUITE
@@ -390,11 +496,5 @@ ASIO_TEST_SUITE
   ASIO_TEST_CASE(system_timer_custom_allocation_test)
   ASIO_TEST_CASE(system_timer_thread_test)
   ASIO_TEST_CASE(system_timer_move_test)
+  ASIO_TEST_CASE(system_timer_op_cancel_test)
 )
-#else // defined(ASIO_HAS_STD_CHRONO)
-ASIO_TEST_SUITE
-(
-  "system_timer",
-  ASIO_TEST_CASE(null_test)
-)
-#endif // defined(ASIO_HAS_STD_CHRONO)

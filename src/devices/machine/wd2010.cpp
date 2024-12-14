@@ -36,9 +36,9 @@ UNIMPLEMENTED FEATURES :
  **********************************************************************/
 
 #include "emu.h"
-#include "machine/wd2010.h"
+#include "wd2010.h"
 
-#define VERBOSE 1
+//#define VERBOSE 1
 #include "logmacro.h"
 
 #include <cmath>
@@ -57,7 +57,8 @@ UNIMPLEMENTED FEATURES :
 // #define CYLINDER_HIGH_MASK 0x03
 
 // --------------------------------------------------------
-#define MAX_MFM_SECTORS 17      // STANDARD MFM SECTORS/TRACK
+// Maximum sector number before ID not found is returned.
+#define MAX_MFM_SECTORS 32
 // --------------------------------------------------------
 
 // Typical access times for MFM drives (as listed in ST412_OEM Manual_Apr82)
@@ -158,18 +159,18 @@ wd2010_device::wd2010_device(const machine_config &mconfig, const char *tag, dev
 	, m_out_intrq_cb(*this)
 	, m_out_bdrq_cb(*this)
 	, m_out_bcr_cb(*this)
-	, m_in_bcs_cb(*this)
-	, m_in_brdy_cb(*this)
+	, m_in_bcs_cb(*this, 0)
+	, m_in_brdy_cb(*this, 0)
 	, m_out_bcs_cb(*this)
 	, m_out_dirin_cb(*this)
 	, m_out_step_cb(*this)
 	, m_out_rwc_cb(*this)
 	, m_out_wg_cb(*this)
-	, m_in_drdy_cb(*this)
-	, m_in_index_cb(*this)
-	, m_in_wf_cb(*this)
-	, m_in_tk000_cb(*this)
-	, m_in_sc_cb(*this)
+	, m_in_drdy_cb(*this, 0)
+	, m_in_index_cb(*this, 0)
+	, m_in_wf_cb(*this, 0)
+	, m_in_tk000_cb(*this, 0)
+	, m_in_sc_cb(*this, 0)
 	, m_status(0)
 	, m_error(0)
 {
@@ -182,37 +183,14 @@ wd2010_device::wd2010_device(const machine_config &mconfig, const char *tag, dev
 
 void wd2010_device::device_start()
 {
-	// resolve callbacks
-	m_out_intrq_cb.resolve_safe();
-	m_out_bdrq_cb.resolve_safe();
-	m_out_bcr_cb.resolve_safe();
-	m_in_bcs_cb.resolve_safe(0);
-
-	m_in_brdy_cb.resolve_safe(0);
-
-	m_out_bcs_cb.resolve_safe();
-	m_out_dirin_cb.resolve_safe();
-	m_out_step_cb.resolve_safe();
-	m_out_rwc_cb.resolve_safe();
-	m_out_wg_cb.resolve_safe();
-	m_in_drdy_cb.resolve_safe(0);
-	m_in_index_cb.resolve_safe(0);
-	m_in_wf_cb.resolve_safe(0);
-	m_in_tk000_cb.resolve_safe(0);
-	m_in_sc_cb.resolve_safe(0);
-
-	/* allocate a timer for commands */
-	cmd_timer = timer_alloc(0);
-	complete_write_when_buffer_ready_high = timer_alloc(1);
-	deassert_write_when_buffer_ready_low = timer_alloc(2);
-	deassert_read_when_buffer_ready_high = timer_alloc(3);
+	// allocate a timer for commands
+	m_cmd_timer = timer_alloc(FUNC(wd2010_device::command_complete), this);
+	m_complete_write_timer = timer_alloc(FUNC(wd2010_device::complete_write), this);
+	m_deassert_write_timer = timer_alloc(FUNC(wd2010_device::deassert_write), this);
+	m_deassert_read_timer = timer_alloc(FUNC(wd2010_device::deassert_read), this);
+	m_next_sector_timer =  timer_alloc(FUNC(wd2010_device::next_sector), this);
+	m_present_cylinder = 0; // start somewhere
 }
-
-// timers
-#define COMMAND_TIMER 0
-#define COMPLETE_WRITE_SECTOR 1
-#define DE_ASSERT_WRITE 2
-#define DE_ASSERT_READ 3
 
 
 //-------------------------------------------------
@@ -224,8 +202,6 @@ void wd2010_device::device_reset()
 	m_out_intrq_cb(CLEAR_LINE);
 
 	buffer_ready(false);
-
-	m_present_cylinder = 0; // start somewhere
 }
 
 
@@ -256,10 +232,10 @@ uint8_t wd2010_device::read(offs_t offset)
 
 		if (offset == TASK_FILE_SDH_REGISTER)
 		{
-			logerror("(READ) %s WD2010 SDH: %u\n", machine().describe_context(), data);
-			logerror("(READ) %s WD2010 Head: %u\n", machine().describe_context(), HEAD);
-			logerror("(READ) %s WD2010 Drive: %u\n", machine().describe_context(), DRIVE);
-			logerror("(READ) %s WD2010 Sector Size: %u\n", machine().describe_context(), SECTOR_SIZE);
+			LOG("(READ) %s WD2010 SDH: %u\n", machine().describe_context(), data);
+			LOG("(READ) %s WD2010 Head: %u\n", machine().describe_context(), HEAD);
+			LOG("(READ) %s WD2010 Drive: %u\n", machine().describe_context(), DRIVE);
+			LOG("(READ) %s WD2010 Sector Size: %u\n", machine().describe_context(), SECTOR_SIZE);
 		}
 
 		break;
@@ -430,7 +406,7 @@ void wd2010_device::restore(uint8_t data)
 			// NOTE: calculation needs 'data' (extracted from command register)
 			float step_ms = SETTLING_MS + LATENCY_MS + ( (float)sqrt(1.0 * step_pulses) * STEP_RATE_MS );
 
-			cmd_timer->adjust(attotime::from_usec(1000 * step_ms), newstatus);
+			m_cmd_timer->adjust(attotime::from_usec(1000 * step_ms), newstatus);
 			return;
 		}
 
@@ -532,7 +508,7 @@ void wd2010_device::seek(uint8_t data)
 	m_task_file[TASK_FILE_CYLINDER_LOW] = (m_present_cylinder - ((m_task_file[TASK_FILE_CYLINDER_HIGH] << 8) )) & 0xff;
 
 	//LOGERROR("SEEK (END) - m_present_cylinder = %u SDH CYL L/H %02x / %02x\n", m_present_cylinder,m_task_file[TASK_FILE_CYLINDER_LOW],m_task_file[TASK_FILE_CYLINDER_HIGH]);
-	cmd_timer->adjust(attotime::from_usec(1000 * step_ms), newstatus);
+	m_cmd_timer->adjust(attotime::from_usec(1000 * step_ms), newstatus);
 }
 
 //-------------------------------------------------
@@ -607,9 +583,7 @@ void wd2010_device::read_sector(uint8_t data)
 
 			// FLAG "M" SET? (MULTIPLE SECTOR TRANSFERS)
 			if (data & 4)
-				logerror("WD2010 (READ): MULTIPLE SECTOR READ (M = 1).\n");
-
-			// Assume: NO "M" (MULTIPLE SECTOR TRANSFERS)
+				LOG("WD2010 (READ): MULTIPLE SECTOR READ (M = 1).\n");
 
 			m_out_bcs_cb(0); // deactivate BCS (!)
 
@@ -644,7 +618,7 @@ void wd2010_device::read_sector(uint8_t data)
 	// NOTE : (intrq_at_end = 0) - INTRQ occurs when the command is completed
 	newstatus |= (m_status & ~(STATUS_CIP | STATUS_DRQ)) | intrq_at_end; // de-assert CIP + DRQ (BSY already reset)
 
-	deassert_read_when_buffer_ready_high->adjust(attotime::from_usec(1), newstatus); // complete command ON  *RISING EDGE * OF BUFFER_READY
+	m_deassert_read_timer->adjust(attotime::from_usec(1), newstatus); // complete command ON  *RISING EDGE * OF BUFFER_READY
 }
 
 
@@ -671,7 +645,7 @@ void wd2010_device::write_sector(uint8_t data)
 	m_out_bdrq_cb(1);
 
 	//  WAIT UNTIL BRDY ASSERTED (-> timer):
-	complete_write_when_buffer_ready_high->adjust(attotime::from_usec(1), data); // 1 usec
+	m_complete_write_timer->adjust(attotime::from_usec(1), data); // 1 usec
 }
 
 
@@ -728,7 +702,7 @@ void wd2010_device::complete_write_sector(uint8_t data)
 	} // --------------------------------------------------------
 
 	// 'complete_cmd' ON THE FALLING EDGE OF _BUFFER_READY_ ( set by WRITE_SECTOR ) !
-	deassert_write_when_buffer_ready_low->adjust(attotime::from_usec(1), newstatus);
+	m_deassert_write_timer->adjust(attotime::from_usec(1), newstatus);
 }
 
 // ******************************************************
@@ -862,7 +836,7 @@ void wd2010_device::format(uint8_t data)
 	m_out_wg_cb(0);   // (transition from WG 1 -> 0). Actual write.
 
 	//  ** DELAY INTRQ UNTIL WRITE IS COMPLETE :
-	complete_write_when_buffer_ready_high->adjust(attotime::from_usec(1), newstatus | STATUS_DRQ); // 1 USECs
+	m_complete_write_timer->adjust(attotime::from_usec(1), newstatus | STATUS_DRQ); // 1 USECs
 }
 
 
@@ -875,65 +849,80 @@ void wd2010_device::buffer_ready(bool state)
 }
 
 
-void wd2010_device::device_timer(emu_timer &timer, device_timer_id tid, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(wd2010_device::command_complete)
 {
-	switch (tid)
+	m_cmd_timer->adjust(attotime::never);
+	complete_immediate(param);
+}
+
+TIMER_CALLBACK_MEMBER(wd2010_device::complete_write)
+{
+	// when BUFFER_READY -> HIGH
+	if (is_buffer_ready)
 	{
-	case COMMAND_TIMER:
-		cmd_timer->adjust(attotime::never);
+		m_complete_write_timer->adjust(attotime::never);
+		complete_write_sector(param);
+	}
+	else
+	{
+		m_complete_write_timer->reset();
+		m_complete_write_timer->adjust(attotime::from_usec(1), param); // DELAY ANOTHER 1 USEC (!)
+	}
+}
+
+TIMER_CALLBACK_MEMBER(wd2010_device::deassert_write)
+{
+	//  waiting for BUFFER_READY -> LOW
+	if (!(is_buffer_ready))
+	{
+		m_deassert_write_timer->adjust(attotime::never);
 		complete_immediate(param);
+	}
+	else
+	{
+		m_deassert_write_timer->reset();
+		m_deassert_write_timer->adjust(attotime::from_usec(1), param); // DELAY ANOTHER 1 USEC (!)
+	}
+}
+
+TIMER_CALLBACK_MEMBER(wd2010_device::deassert_read)
+{
+	// when BUFFER_READY -> HIGH
+	if (is_buffer_ready)
+	{
+		m_deassert_read_timer->adjust(attotime::never);
+
+		m_error &= ~ERROR_ID;
+		param &= ~STATUS_ERR;
+
+		m_out_bdrq_cb(0);
+		complete_immediate(param);
+	}
+	else
+	{
+		m_deassert_read_timer->reset();
+		m_deassert_read_timer->adjust(attotime::from_usec(1), param); // DELAY ANOTHER 1 USEC (!)
+	}
+}
+
+TIMER_CALLBACK_MEMBER(wd2010_device::next_sector)
+{
+	uint8_t cmd = m_task_file[TASK_FILE_COMMAND];
+
+	switch (cmd & 0xf0)
+	{
+	case 0x20:
+		read_sector(cmd);
 		break;
-
-	case COMPLETE_WRITE_SECTOR:  // when BUFFER_READY -> HIGH
-		if (is_buffer_ready)
-		{
-			complete_write_when_buffer_ready_high->adjust(attotime::never);
-			complete_write_sector(param);
-		}
-		else
-		{
-			complete_write_when_buffer_ready_high->reset();
-			complete_write_when_buffer_ready_high->adjust(attotime::from_usec(1), param); // DELAY ANOTHER 1 USEC (!)
-		}
+	case 0x30:
+		write_sector(cmd);
 		break;
-
-	case DE_ASSERT_WRITE: //  waiting for BUFFER_READY -> LOW
-		if (!(is_buffer_ready))
-		{
-			deassert_write_when_buffer_ready_low->adjust(attotime::never);
-			complete_immediate(param);
-		}
-		else
-		{
-			deassert_write_when_buffer_ready_low->reset();
-			deassert_write_when_buffer_ready_low->adjust(attotime::from_usec(1), param); // DELAY ANOTHER 1 USEC (!)
-		}
-		break;
-
-	case DE_ASSERT_READ: // when BUFFER_READY -> HIGH
-		if (is_buffer_ready)
-		{
-			deassert_read_when_buffer_ready_high->adjust(attotime::never);
-
-			m_error &= ~ERROR_ID;
-			param &= ~STATUS_ERR;
-
-			m_out_bdrq_cb(0);
-			complete_immediate(param);
-		}
-		else
-		{
-			deassert_read_when_buffer_ready_high->reset();
-			deassert_read_when_buffer_ready_high->adjust(attotime::from_usec(1), param); // DELAY ANOTHER 1 USEC (!)
-		}
-		break;
-
 	default:
 		break;
 	}
 }
 
-// Called by 'device_timer' -
+// Called by timer callbacks -
 void wd2010_device::complete_immediate(uint8_t status)
 {
 	// re-evaluate external signals at end of command
@@ -944,6 +933,17 @@ void wd2010_device::complete_immediate(uint8_t status)
 	{
 		status &= ~(STATUS_DRQ);
 		m_out_bdrq_cb(0);
+	}
+
+	uint8_t cmd = m_task_file[TASK_FILE_COMMAND] & 0xf4;
+	if ((cmd == 0x24) || (cmd == 0x34))
+	{
+		if (--m_task_file[TASK_FILE_SECTOR_COUNT] > 1)
+		{
+			m_task_file[TASK_FILE_SECTOR_NUMBER]++;
+			m_next_sector_timer->adjust(attotime::from_usec(100));
+			return;
+		}
 	}
 
 	// Set current status (M_STATUS)
@@ -964,5 +964,5 @@ void wd2010_device::complete_immediate(uint8_t status)
 
 void wd2010_device::complete_cmd(uint8_t status)
 {
-	cmd_timer->adjust(attotime::from_msec(1), status);
+	m_cmd_timer->adjust(attotime::from_msec(1), status);
 }

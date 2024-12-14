@@ -17,8 +17,9 @@ issues, developing software to run on vintage systems, creating cheats,
 ROM hacking, or just investigating how software works.
 
 Use the ``-debug`` command line option to start MAME with the debugger
-activated.  By default, pressing the tilde (**~**) during emulation
-breaks into the debugger.
+activated.  By default, pressing the backtick/tilde (**~**) during
+emulation breaks into the debugger (this can be changed by reassigning
+the **Break in Debugger** input).
 
 The exact appearance of the debugger depends on your operating system
 and the options MAME was built with.  All variants of the debugger
@@ -49,6 +50,7 @@ name of a command, to see documentation directly in MAME.
     breakpoint
     watchpoint
     registerpoints
+    exceptionpoint
     annotation
     cheats
     image
@@ -162,7 +164,7 @@ debugger should take the most likely meaning for a device or address
 space specification.
 
 
-.. _debugger-expressions:
+.. _debugger-express:
 
 Debugger expression syntax
 --------------------------
@@ -189,7 +191,7 @@ precedence:
     Addition, subtraction
 ``<<`` ``>>``
     Bitwise left/right shift
-``< ``<=`` ``>`` ``>=``
+``<`` ``<=`` ``>`` ``>=``
     Less than, less than or equal, greater than, greater than or equal
 ``==`` ``!=``
     Equal, not equal
@@ -217,6 +219,8 @@ Major differences from C expression semantics:
   always evaluated.
 
 
+.. _debugger-express-num:
+
 Numbers
 ~~~~~~~
 
@@ -235,9 +239,11 @@ Examples:
 * ``0x123`` is 123 hexadecimal (291 decimal)
 * ``#123`` is 123 decimal
 * ``0o123`` is 123 octal (83 decimal)
-* ``0b1001`` is is 1001 binary (9 decimal)
+* ``0b1001`` is 1001 binary (9 decimal)
 * ``0b123`` is invalid
 
+
+.. _debugger-express-bool:
 
 Boolean values
 ~~~~~~~~~~~~~~
@@ -251,6 +257,8 @@ An empty string may be supplied as an argument for Boolean parameters to
 debugger commands to use the default value, even when subsequent
 parameters are specified.
 
+
+.. _debugger-express-mem:
 
 Memory accesses
 ~~~~~~~~~~~~~~~
@@ -280,22 +288,22 @@ multiple effects of a write access.  For example:
 
 * Some registers need to be written in sequence to avoid race
   conditions.  The debugger can issue multiple writes at the same point
-  in emulated time, so these race conditions cannot be avoided
-  trivially.  For example writing to the MC68HC05 output compare
-  register high byte (OCRH) inhibits compare until the output compare
-  register low byte (OCRL) is written to prevent race conditions.
-  Since the debugger can write to both locations at the same instant
-  from the emulated machine’s point of view, the race condition is not
-  usually relevant.  It’s more error-prone if you can accidentally set
-  hidden state when all you really want to do is change the value, so
-  writing to OCRH with side effects suppressed does not inhibit compare,
-  it just changes the value in the output compare register.
+  in emulated time, so these race conditions can be avoided trivially.
+  For example writing to the MC68HC05 output compare register high byte
+  (OCRH) inhibits compare until the output compare register low byte
+  (OCRL) is written to prevent race conditions.  Since the debugger can
+  write to both locations at the same instant from the emulated
+  machine’s point of view, the race condition is not usually relevant.
+  It’s more error-prone if you can accidentally set hidden state when
+  all you really want to do is change the value, so writing to OCRH with
+  side effects suppressed does not inhibit compare, it just changes the
+  value in the output compare register.
 * Writing to some registers has multiple effects that may be useful to
   separate for debugging purposes.  Using the MC68HC05 as an example
   again, writing to OCRL changes the value in the output compare
   register, and also clears the output compare flag (OCF) and enables
   compare if it was previously inhibited by writing to OCRH.  Writing to
-  OCRL with side effects disable just changes the value in the register
+  OCRL with side effects disabled just changes the value in the register
   without clearing OCF or enabling compare, since it’s useful for
   debugging purposes.  Writing to OCRL with side effects enabled has the
   additional effects.
@@ -352,7 +360,7 @@ Adding access types gives additional possibilities:
     suppressing side effects
 ``id@400``
     Refers to the double word at 400 in the I/O space of the current CPU
-    CPU while suppressing side effects
+    while suppressing side effects
 ``ppd!<addr>``
     Refers to the double word at physical address **<addr>** in the
     program space of the current CPU while not suppressing side effects
@@ -389,6 +397,8 @@ Memory accesses can be used as both lvalues and rvalues, so you can write
 ``b@100 = ff`` to store a byte in memory.
 
 
+.. _debugger-express-func:
+
 Functions
 ~~~~~~~~~
 
@@ -408,8 +418,8 @@ abs(<x>)
     absolute value.
 bit(<x>, <n>[, <w>])
     Extracts and right-aligns a bit field **<w>** bits wide from **<x>**
-    with least significant bit position position **<n>**, counting from
-    the least significant bit.  If **<w>** is omitted, a single bit is
+    with least significant bit position **<n>**, counting from the
+    least significant bit.  If **<w>** is omitted, a single bit is
     extracted.
 s8(<x>)
     Sign-extends the argument from 8 bits to 64 bits (overwrites bits 8

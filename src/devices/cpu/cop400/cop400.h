@@ -73,8 +73,6 @@ enum cop400_cko_bond {
 class cop400_cpu_device : public cpu_device
 {
 public:
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
-
 	// L pins: 8-bit bi-directional
 	auto read_l() { return m_read_l.bind(); }
 	auto write_l() { return m_write_l.bind(); }
@@ -113,30 +111,35 @@ public:
 	void set_cko(cop400_cko_bond cko) { m_cko = cko; }
 	void set_microbus(bool has_microbus) { m_has_microbus = has_microbus; }
 
-	uint8_t microbus_rd();
-	void microbus_wr(uint8_t data);
+	// output pin state accessors
+	int so_r() { return m_so_output; }
+	int sk_r() { return m_sk_output; }
+	uint8_t l_r() { return m_l_output; }
 
-	void data_128b(address_map &map);
-	void data_32b(address_map &map);
-	void data_64b(address_map &map);
-	void program_1kb(address_map &map);
-	void program_2kb(address_map &map);
-	void program_512b(address_map &map);
+	// microbus
+	uint8_t microbus_r();
+	void microbus_w(uint8_t data);
+
+	void data_128b(address_map &map) ATTR_COLD;
+	void data_32b(address_map &map) ATTR_COLD;
+	void data_64b(address_map &map) ATTR_COLD;
+	void program_1kb(address_map &map) ATTR_COLD;
+	void program_2kb(address_map &map) ATTR_COLD;
+	void program_512b(address_map &map) ATTR_COLD;
 
 protected:
 	// construction/destruction
 	cop400_cpu_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, uint8_t program_addr_bits, uint8_t data_addr_bits, uint8_t featuremask, uint8_t g_mask, uint8_t d_mask, uint8_t in_mask, bool has_counter, bool has_inil, address_map_constructor internal_map_program, address_map_constructor internal_map_data);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint64_t execute_clocks_to_cycles(uint64_t clocks) const noexcept override { return (clocks + m_cki - 1) / m_cki; }
 	virtual uint64_t execute_cycles_to_clocks(uint64_t cycles) const noexcept override { return (cycles * m_cki); }
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; }
 	virtual uint32_t execute_max_cycles() const noexcept override { return 2; }
-	virtual uint32_t execute_input_lines() const noexcept override { return 0; }
 	virtual void execute_run() override;
 
 	// device_memory_interface overrides
@@ -147,6 +150,8 @@ protected:
 
 	// device_disasm_interface overrides
 	virtual std::unique_ptr<util::disasm_interface> create_disassembler() override;
+
+	TIMER_CALLBACK_MEMBER(advance_counter);
 
 	address_space_config m_program_config;
 	address_space_config m_data_config;
@@ -193,7 +198,7 @@ protected:
 	// registers
 	uint16_t m_pc;             // 9/10/11-bit ROM address program counter
 	uint16_t m_prevpc;         // previous value of program counter
-	uint8_t  m_a;              // 4-bit accumulator
+	uint8_t m_a;               // 4-bit accumulator
 	uint8_t m_b;               // 5/6/7-bit RAM address register
 	int m_c;                   // 1-bit carry register
 	uint8_t m_en;              // 4-bit enable register
@@ -214,6 +219,9 @@ protected:
 	uint8_t m_il;              // IN latch
 	uint8_t m_in[4];           // IN port shift register
 	uint8_t m_si;              // serial input
+	int m_so_output;           // SO pin output state
+	int m_sk_output;           // SK pin output state
+	uint8_t m_l_output;        // L pins output state
 
 	// skipping logic
 	bool m_skip;               // skip next instruction

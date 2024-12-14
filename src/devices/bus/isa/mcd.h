@@ -6,7 +6,8 @@
 #pragma once
 
 #include "isa.h"
-#include "imagedev/chd_cd.h"
+#include "imagedev/cdromimg.h"
+#include "sound/cdda.h"
 
 //**************************************************************************
 //  TYPE DEFINITIONS
@@ -22,23 +23,19 @@ public:
 	mcd_isa_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 protected:
-	// optional information overrides
-	virtual ioport_constructor device_input_ports() const override;
-
 	virtual uint16_t dack16_r(int line) override;
-
-protected:
-	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 private:
+	required_device<cdda_device> m_cdda;
 	uint8_t data_r();
 	uint8_t flag_r();
 	void cmd_w(uint8_t data);
 	void reset_w(uint8_t data);
 
-	void map(address_map &map);
+	void map(address_map &map) ATTR_COLD;
 
 	bool read_sector(bool first = false);
 

@@ -50,9 +50,9 @@ protected:
 	mm76_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock, int prgwidth, address_map_constructor program, int datawidth, address_map_constructor data);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 	// device_disasm_interface overrides
 	virtual std::unique_ptr<util::disasm_interface> create_disassembler() override;
@@ -60,8 +60,8 @@ protected:
 	// device_execute_interface overrides
 	virtual void execute_one() override;
 
-	void data_48x4(address_map &map);
-	void program_0_6k(address_map &map);
+	void data_48x4(address_map &map) ATTR_COLD;
+	void program_0_6k(address_map &map) ATTR_COLD;
 
 	// opcode helpers
 	u8 ram_r();
@@ -71,10 +71,10 @@ protected:
 	void op_illegal();
 	void op_todo();
 
-	virtual bool op_is_tr(u8 op) override { return (op & 0xf0) == 0x30; };
-	virtual bool op_is_eob(u8 op) { return (op & 0xfc) == 0x1c; };
-	virtual bool op_is_lb(u8 op) { return (op & 0xf0) == 0x20; };
-	virtual bool op_is_lai(u8 op) { return (op & 0xf0) == 0x70; };
+	virtual bool op_is_tr(u8 op) override { return (op & 0xf0) == 0x30; }
+	virtual bool op_is_eob(u8 op) { return (op & 0xfc) == 0x1c; }
+	virtual bool op_is_lb(u8 op) { return (op & 0xf0) == 0x20; }
+	virtual bool op_is_lai(u8 op) { return (op & 0xf0) == 0x70; }
 
 	// opcode handlers
 	virtual void op_xab();
@@ -147,7 +147,7 @@ public:
 protected:
 	mm76e_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock, int prgwidth, address_map_constructor program, int datawidth, address_map_constructor data);
 
-	void program_1k(address_map &map);
+	void program_1k(address_map &map) ATTR_COLD;
 };
 
 class mm76el_device : public mm76e_device

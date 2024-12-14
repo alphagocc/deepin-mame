@@ -38,16 +38,17 @@ public:
 
 protected:
 	// device-level overrides
-	virtual const tiny_rom_entry *device_rom_region() const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_memory_interface overrides
 	virtual space_config_vector memory_space_config() const override;
 
 	uint8_t readbyte(offs_t address) { return space().read_byte(address); }
 	void writebyte(offs_t address, uint8_t data) { space().write_byte(address, data); }
+
+	TIMER_CALLBACK_MEMBER(clear_busy_flag);
 
 private:
 	enum
@@ -74,7 +75,7 @@ private:
 	void draw_char(bitmap_ind16 &bitmap, const rectangle &cliprect, uint16_t ma, int x, int y, uint8_t md);
 	void update_text(bitmap_ind16 &bitmap, const rectangle &cliprect);
 
-	void hd61830(address_map &map);
+	void hd61830(address_map &map) ATTR_COLD;
 
 	devcb_read8 m_read_rd;
 

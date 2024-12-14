@@ -421,7 +421,7 @@ protected:
 	generic_voodoo_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock, voodoo::voodoo_model model);
 
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 	// configuration
 	const voodoo::voodoo_model m_model;      // which voodoo model
@@ -490,7 +490,7 @@ public:
 	virtual ~voodoo_1_device();
 
 	// address map and read/write helpers
-	virtual void core_map(address_map &map) override;
+	virtual void core_map(address_map &map) override ATTR_COLD;
 	virtual u32 read(offs_t offset, u32 mem_mask = ~0) override;
 	virtual void write(offs_t offset, u32 data, u32 mem_mask = ~0) override;
 
@@ -502,9 +502,9 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_stop() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_stop() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_post_load() override;
 
 	// system management
@@ -589,8 +589,8 @@ protected:
 
 	// VBLANK timing
 	void adjust_vblank_start_timer();
-	virtual void vblank_start(void *ptr, s32 param);
-	virtual void vblank_stop(void *ptr, s32 param);
+	virtual void vblank_start(s32 param);
+	virtual void vblank_stop(s32 param);
 	void swap_buffers();
 	virtual void rotate_buffers();
 
@@ -614,7 +614,7 @@ protected:
 	void clear_pending_operation() { m_operation_end = attotime::zero; }
 	void check_stalled_cpu(attotime current_time);
 	void stall_cpu(stall_state state);
-	void stall_resume_callback(void *ptr, s32 param);
+	void stall_resume_callback(s32 param);
 
 	// misc helpers
 	u32 chipmask_from_offset(u32 offset)

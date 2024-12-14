@@ -25,8 +25,8 @@ protected:
 	};
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override;
@@ -83,7 +83,7 @@ protected:
 
 	memory_access<14, 0, 0, ENDIANNESS_LITTLE>::cache m_cache;
 	memory_access<14, 0, 0, ENDIANNESS_LITTLE>::specific m_program;
-	memory_access< 5, 0, 0, ENDIANNESS_LITTLE>::specific m_io;
+	memory_access<16, 0, 0, ENDIANNESS_LITTLE>::specific m_io;
 };
 
 // device type definition

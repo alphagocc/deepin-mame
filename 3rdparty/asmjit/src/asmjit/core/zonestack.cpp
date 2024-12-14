@@ -1,25 +1,7 @@
-// AsmJit - Machine code generation for C++
+// This file is part of AsmJit project <https://asmjit.com>
 //
-//  * Official AsmJit Home Page: https://asmjit.com
-//  * Official Github Repository: https://github.com/asmjit/asmjit
-//
-// Copyright (c) 2008-2020 The AsmJit Authors
-//
-// This software is provided 'as-is', without any express or implied
-// warranty. In no event will the authors be held liable for any damages
-// arising from the use of this software.
-//
-// Permission is granted to anyone to use this software for any purpose,
-// including commercial applications, and to alter it and redistribute it
-// freely, subject to the following restrictions:
-//
-// 1. The origin of this software must not be misrepresented; you must not
-//    claim that you wrote the original software. If you use this software
-//    in a product, an acknowledgment in the product documentation would be
-//    appreciated but is not required.
-// 2. Altered source versions must be plainly marked as such, and must not be
-//    misrepresented as being the original software.
-// 3. This notice may not be removed or altered from any source distribution.
+// See asmjit.h or LICENSE.md for license and copyright information
+// SPDX-License-Identifier: Zlib
 
 #include "../core/api-build_p.h"
 #include "../core/zone.h"
@@ -27,15 +9,14 @@
 
 ASMJIT_BEGIN_NAMESPACE
 
-// ============================================================================
-// [asmjit::ZoneStackBase - Init / Reset]
-// ============================================================================
+// ZoneStackBase - Initialization & Reset
+// ======================================
 
 Error ZoneStackBase::_init(ZoneAllocator* allocator, size_t middleIndex) noexcept {
   ZoneAllocator* oldAllocator = _allocator;
 
   if (oldAllocator) {
-    Block* block = _block[Globals::kLinkFirst];
+    Block* block = _block[kBlockIndexFirst];
     while (block) {
       Block* next = block->next();
       oldAllocator->release(block, kBlockSize);
@@ -43,8 +24,8 @@ Error ZoneStackBase::_init(ZoneAllocator* allocator, size_t middleIndex) noexcep
     }
 
     _allocator = nullptr;
-    _block[Globals::kLinkLeft] = nullptr;
-    _block[Globals::kLinkRight] = nullptr;
+    _block[kBlockIndexFirst] = nullptr;
+    _block[kBlockIndexLast] = nullptr;
   }
 
   if (allocator) {
@@ -52,22 +33,21 @@ Error ZoneStackBase::_init(ZoneAllocator* allocator, size_t middleIndex) noexcep
     if (ASMJIT_UNLIKELY(!block))
       return DebugUtils::errored(kErrorOutOfMemory);
 
-    block->_link[Globals::kLinkLeft] = nullptr;
-    block->_link[Globals::kLinkRight] = nullptr;
+    block->_link[kBlockIndexPrev] = nullptr;
+    block->_link[kBlockIndexNext] = nullptr;
     block->_start = (uint8_t*)block + middleIndex;
     block->_end = (uint8_t*)block + middleIndex;
 
     _allocator = allocator;
-    _block[Globals::kLinkLeft] = block;
-    _block[Globals::kLinkRight] = block;
+    _block[kBlockIndexFirst] = block;
+    _block[kBlockIndexLast] = block;
   }
 
   return kErrorOk;
 }
 
-// ============================================================================
-// [asmjit::ZoneStackBase - Ops]
-// ============================================================================
+// ZoneStackBase - Operations
+// ==========================
 
 Error ZoneStackBase::_prepareBlock(uint32_t side, size_t initialIndex) noexcept {
   ASMJIT_ASSERT(isInitialized());
@@ -109,9 +89,8 @@ void ZoneStackBase::_cleanupBlock(uint32_t side, size_t middleIndex) noexcept {
   }
 }
 
-// ============================================================================
-// [asmjit::ZoneStack - Unit]
-// ============================================================================
+// ZoneStack - Tests
+// =================
 
 #if defined(ASMJIT_TEST)
 template<typename T>
@@ -121,18 +100,24 @@ static void test_zone_stack(ZoneAllocator* allocator, const char* typeName) {
   INFO("Testing ZoneStack<%s>", typeName);
   INFO("  (%d items per one Block)", ZoneStack<T>::kNumBlockItems);
 
-  EXPECT(stack.init(allocator) == kErrorOk);
-  EXPECT(stack.empty(), "Stack must be empty after `init()`");
+  EXPECT_EQ(stack.init(allocator), kErrorOk);
+  EXPECT_TRUE(stack.empty());
 
-  EXPECT(stack.append(42) == kErrorOk);
-  EXPECT(!stack.empty()        , "Stack must not be empty after an item has been appended");
-  EXPECT(stack.pop() == 42     , "Stack.pop() must return the item that has been appended last");
-  EXPECT(stack.empty()         , "Stack must be empty after the last item has been removed");
+  EXPECT_EQ(stack.append(42), kErrorOk);
+  EXPECT_FALSE(stack.empty())
+    .message("Stack must not be empty after an item has been appended");
+  EXPECT_EQ(stack.pop(), 42)
+    .message("Stack.pop() must return the item that has been appended last");
+  EXPECT_TRUE(stack.empty())
+    .message("Stack must be empty after the last item has been removed");
 
-  EXPECT(stack.prepend(43) == kErrorOk);
-  EXPECT(!stack.empty()        , "Stack must not be empty after an item has been prepended");
-  EXPECT(stack.popFirst() == 43, "Stack.popFirst() must return the item that has been prepended last");
-  EXPECT(stack.empty()         , "Stack must be empty after the last item has been removed");
+  EXPECT_EQ(stack.prepend(43), kErrorOk);
+  EXPECT_FALSE(stack.empty())
+    .message("Stack must not be empty after an item has been prepended");
+  EXPECT_EQ(stack.popFirst(), 43)
+    .message("Stack.popFirst() must return the item that has been prepended last");
+  EXPECT_TRUE(stack.empty())
+    .message("Stack must be empty after the last item has been removed");
 
   int i;
   int iMin =-100000;
@@ -142,27 +127,31 @@ static void test_zone_stack(ZoneAllocator* allocator, const char* typeName) {
   for (i = iMax; i >= 0; i--) stack.prepend(T(i));
   for (i = 0; i <= iMax; i++) {
     T item = stack.popFirst();
-    EXPECT(i == item, "Item '%d' didn't match the item '%lld' popped", i, (long long)item);
+    EXPECT_EQ(i, item)
+      .message("Item '%d' didn't match the item '%lld' popped", i, (long long)item);
     if (!stack.empty()) {
       item = stack.popFirst();
-      EXPECT(i + 1 == item, "Item '%d' didn't match the item '%lld' popped", i + 1, (long long)item);
+      EXPECT_EQ(i + 1, item)
+        .message("Item '%d' didn't match the item '%lld' popped", i + 1, (long long)item);
       stack.prepend(item);
     }
   }
-  EXPECT(stack.empty());
+  EXPECT_TRUE(stack.empty());
 
   INFO("Validating append() & pop()");
   for (i = 0; i <= iMax; i++) stack.append(T(i));
   for (i = iMax; i >= 0; i--) {
     T item = stack.pop();
-    EXPECT(i == item, "Item '%d' didn't match the item '%lld' popped", i, (long long)item);
+    EXPECT_EQ(i, item)
+      .message("Item '%d' didn't match the item '%lld' popped", i, (long long)item);
     if (!stack.empty()) {
       item = stack.pop();
-      EXPECT(i - 1 == item, "Item '%d' didn't match the item '%lld' popped", i - 1, (long long)item);
+      EXPECT_EQ(i - 1, item)
+        .message("Item '%d' didn't match the item '%lld' popped", i - 1, (long long)item);
       stack.append(item);
     }
   }
-  EXPECT(stack.empty());
+  EXPECT_TRUE(stack.empty());
 
   INFO("Validating append()/prepend() & popFirst()");
   for (i = 1; i <= iMax; i++) stack.append(T(i));
@@ -170,9 +159,9 @@ static void test_zone_stack(ZoneAllocator* allocator, const char* typeName) {
 
   for (i = iMin; i <= iMax; i++) {
     T item = stack.popFirst();
-    EXPECT(i == item, "Item '%d' didn't match the item '%lld' popped", i, (long long)item);
+    EXPECT_EQ(i, item);
   }
-  EXPECT(stack.empty());
+  EXPECT_TRUE(stack.empty());
 
   INFO("Validating append()/prepend() & pop()");
   for (i = 0; i >= iMin; i--) stack.prepend(T(i));
@@ -180,9 +169,9 @@ static void test_zone_stack(ZoneAllocator* allocator, const char* typeName) {
 
   for (i = iMax; i >= iMin; i--) {
     T item = stack.pop();
-    EXPECT(i == item, "Item '%d' didn't match the item '%lld' popped", i, (long long)item);
+    EXPECT_EQ(i, item);
   }
-  EXPECT(stack.empty());
+  EXPECT_TRUE(stack.empty());
 }
 
 UNIT(zone_stack) {

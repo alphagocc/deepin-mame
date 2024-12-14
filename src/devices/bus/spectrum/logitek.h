@@ -30,27 +30,27 @@ public:
 
 	static constexpr feature_type unemulated_features() { return feature::DISK; }
 
-	DECLARE_INPUT_CHANGED_MEMBER(nmi_button) { m_slot->nmi_w(newval ? ASSERT_LINE : CLEAR_LINE); };
+	DECLARE_INPUT_CHANGED_MEMBER(nmi_button) { m_slot->nmi_w(newval ? ASSERT_LINE : CLEAR_LINE); }
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// optional information overrides
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual const tiny_rom_entry *device_rom_region() const override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
 
 	void fetch(offs_t offset);
 
-	virtual void pre_opcode_fetch(offs_t offset) override { fetch(offset); };
-	virtual void pre_data_fetch(offs_t offset) override { fetch(offset); };
+	virtual void pre_opcode_fetch(offs_t offset) override { fetch(offset); }
+	virtual void pre_data_fetch(offs_t offset) override { fetch(offset); }
 	virtual uint8_t mreq_r(offs_t offset) override;
 	virtual uint8_t iorq_r(offs_t offset) override;
 	virtual void iorq_w(offs_t offset, uint8_t data) override;
-	virtual DECLARE_READ_LINE_MEMBER(romcs) override;
+	virtual bool romcs() override;
 
 	required_memory_region m_rom;
 	required_device<z80pio_device> m_z80pio;
@@ -61,7 +61,7 @@ protected:
 	void piob_w(uint8_t data);
 	uint8_t piob_r();
 
-	int m_romcs;
+	bool m_romcs;
 	int m_romen;
 };
 

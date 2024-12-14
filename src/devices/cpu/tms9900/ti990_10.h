@@ -11,7 +11,6 @@
 #pragma once
 
 
-#include "debugger.h"
 #include "tms99com.h"
 
 class ti990_10_device : public cpu_device
@@ -27,9 +26,8 @@ protected:
 	void        device_reset() override;
 
 	// device_execute_interface overrides
-	uint32_t      execute_min_cycles() const noexcept override;
-	uint32_t      execute_max_cycles() const noexcept override;
-	uint32_t      execute_input_lines() const noexcept override;
+	uint32_t    execute_min_cycles() const noexcept override;
+	uint32_t    execute_max_cycles() const noexcept override;
 	void        execute_set_input(int irqline, int state) override;
 	void        execute_run() override;
 

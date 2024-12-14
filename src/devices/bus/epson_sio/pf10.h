@@ -32,13 +32,12 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// optional information overrides
-	virtual const tiny_rom_entry *device_rom_region() const override;
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 	// device_epson_sio_interface overrides
 	virtual void tx_w(int level) override;
@@ -46,11 +45,11 @@ protected:
 
 private:
 	// serial output from main cpu
-	DECLARE_WRITE_LINE_MEMBER( hd6303_tx_w );
+	void hd6303_tx_w(int state);
 
 	// from sio output
-	DECLARE_WRITE_LINE_MEMBER( rxc_w );
-	DECLARE_WRITE_LINE_MEMBER( pinc_w );
+	void rxc_w(int state);
+	void pinc_w(int state);
 
 	// floppy disk controller
 	uint8_t fdc_r(offs_t offset);
@@ -63,9 +62,11 @@ private:
 	uint8_t port2_r();
 	void port2_w(uint8_t data);
 
-	void cpu_mem(address_map &map);
+	TIMER_CALLBACK_MEMBER( serial_clk_tick );
 
-	required_device<hd6303y_cpu_device> m_cpu;
+	void cpu_mem(address_map &map) ATTR_COLD;
+
+	required_device<hd6303x_cpu_device> m_cpu;
 	required_device<upd765a_device> m_fdc;
 	required_device<epson_sio_device> m_sio_output;
 	required_device<floppy_connector> m_floppy;

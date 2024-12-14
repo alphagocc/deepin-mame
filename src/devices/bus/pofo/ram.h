@@ -12,7 +12,6 @@
 #pragma once
 
 #include "ccm.h"
-#include "machine/nvram.h"
 
 
 
@@ -31,15 +30,15 @@ public:
 	portfolio_ram_card_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 protected:
-	// device-level overrides
-	virtual void device_start() override;
+	// device_t implementation
+	virtual void device_start() override ATTR_COLD;
 
-	// device_nvram_interface overrides
-	virtual void nvram_default() override { }
-	virtual void nvram_read(emu_file &file) override { if (m_nvram != nullptr) { file.read(m_nvram, m_nvram.bytes()); } }
-	virtual void nvram_write(emu_file &file) override { if (m_nvram != nullptr) { file.write(m_nvram, m_nvram.bytes()); } }
+	// device_nvram_interface implementation
+	virtual void nvram_default() override;
+	virtual bool nvram_read(util::read_stream &file) override;
+	virtual bool nvram_write(util::write_stream &file) override;
 
-	// device_portfolio_memory_card_slot_interface overrides
+	// device_portfolio_memory_card_slot_interface implementation
 	virtual bool cdet() override { return 0; }
 
 	virtual uint8_t nrdi_r(offs_t offset) override;

@@ -33,6 +33,10 @@
 
 #define PROJECT_48STEP_REEL     10
 
+#define SRU_200STEP_REEL        11
+
+#define SYS5_100STEP_REEL       12
+
 
 class stepper_device : public device_t
 {
@@ -69,6 +73,8 @@ public:
 	int get_position()          { return m_step_pos; }
 	/* get current absolute position in half steps */
 	int get_absolute_position() { return m_abs_step_pos; }
+	/* set absolute position in half steps */
+	void set_absolute_position(int pos) { m_abs_step_pos = pos; }
 	/* get maximum position in half steps */
 	int get_max()               { return m_max_steps; }
 
@@ -76,8 +82,8 @@ protected:
 	stepper_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock = 0);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	uint8_t m_pattern;      /* coil pattern */
 	uint8_t m_old_pattern;  /* old coil pattern */
@@ -106,7 +112,7 @@ public:
 	reel_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 protected:
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 	virtual void advance_phase() override;
 
 	void set_reel_type(uint8_t type)
@@ -132,6 +138,7 @@ protected:
 		case STARPOINT_200STEP_REEL :
 		case GAMESMAN_200STEP_REEL :
 		case ECOIN_200STEP_REEL :
+		case SRU_200STEP_REEL :
 			m_max_steps = (200*2);
 			break;
 		}

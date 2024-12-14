@@ -17,15 +17,16 @@ public:
 	nanoreseau_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, bool no_id = false);
 	virtual ~nanoreseau_device() = default;
 
-	virtual void rom_map(address_map &map) override;
-	virtual void io_map(address_map &map) override;
+	virtual void rom_map(address_map &map) override ATTR_COLD;
+	virtual void io_map(address_map &map) override ATTR_COLD;
 
 protected:
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual ioport_constructor device_input_ports() const override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(answer_tick);
 
 private:
 	required_device<mc6854_device> m_mc6854;
@@ -47,7 +48,7 @@ public:
 	virtual ~nanoreseau_mo_device() = default;
 
 protected:
-	virtual const tiny_rom_entry *device_rom_region() const override;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
 };
 
 class nanoreseau_to_device : public nanoreseau_device
@@ -57,7 +58,7 @@ public:
 	virtual ~nanoreseau_to_device() = default;
 
 protected:
-	virtual const tiny_rom_entry *device_rom_region() const override;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
 };
 
 DECLARE_DEVICE_TYPE(NANORESEAU_MO, nanoreseau_mo_device)

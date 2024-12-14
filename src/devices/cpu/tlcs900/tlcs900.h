@@ -51,13 +51,12 @@ protected:
 	tlcs900_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; } /* FIXME */
 	virtual uint32_t execute_max_cycles() const noexcept override { return 1; } /* FIXME */
-	virtual uint32_t execute_input_lines() const noexcept override { return 6; }
 	virtual bool execute_input_edge_triggered(int inputnum) const noexcept override { return inputnum == INPUT_LINE_NMI; }
 	virtual void execute_run() override;
 
@@ -65,6 +64,7 @@ protected:
 	virtual space_config_vector memory_space_config() const override;
 
 	// device_state_interface overrides
+	virtual void state_import(const device_state_entry &entry) override;
 	virtual void state_string_export(const device_state_entry &entry, std::string &str) const override;
 
 	// device_disasm_interface overrides
@@ -222,13 +222,13 @@ protected:
 	uint16_t xor16( uint16_t a, uint16_t b);
 	uint32_t xor32( uint32_t a, uint32_t b);
 	void ldcf8( uint8_t a, uint8_t b );
-	void ldcf16( uint8_t a, uint8_t b );
+	void ldcf16( uint8_t a, uint16_t b );
 	void andcf8( uint8_t a, uint8_t b );
-	void andcf16( uint8_t a, uint8_t b );
+	void andcf16( uint8_t a, uint16_t b );
 	void orcf8( uint8_t a, uint8_t b );
-	void orcf16( uint8_t a, uint8_t b );
+	void orcf16( uint8_t a, uint16_t b );
 	void xorcf8( uint8_t a, uint8_t b );
-	void xorcf16( uint8_t a, uint8_t b );
+	void xorcf16( uint8_t a, uint16_t b );
 	uint8_t rl8( uint8_t a, uint8_t s );
 	uint16_t rl16( uint16_t a, uint8_t s );
 	uint32_t rl32( uint32_t a, uint8_t s );
@@ -644,7 +644,7 @@ protected:
 	tlcs900h_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_reset() override;
+	virtual void device_reset() override ATTR_COLD;
 
 	virtual int tlcs900_gpr_cycles() const override { return 1; }
 	virtual int tlcs900_mem_index_cycles() const override { return 1; }

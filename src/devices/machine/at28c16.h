@@ -34,16 +34,15 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
 
 	// device_memory_interface overrides
 	virtual space_config_vector memory_space_config() const override;
 
 	// device_nvram_interface overrides
 	virtual void nvram_default() override;
-	virtual void nvram_read(emu_file &file) override;
-	virtual void nvram_write(emu_file &file) override;
+	virtual bool nvram_read(util::read_stream &file) override;
+	virtual bool nvram_write(util::write_stream &file) override;
 
 private:
 	// internal state
@@ -55,10 +54,11 @@ private:
 	optional_region_ptr<uint8_t> m_default_data;
 
 	// I/O operations
-	DECLARE_WRITE_LINE_MEMBER( set_a9_12v );
-	DECLARE_WRITE_LINE_MEMBER( set_oe_12v );
+	void set_a9_12v(int state);
+	void set_oe_12v(int state);
+	TIMER_CALLBACK_MEMBER( write_complete );
 
-	void at28c16_map8(address_map &map);
+	void at28c16_map8(address_map &map) ATTR_COLD;
 };
 
 

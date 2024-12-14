@@ -4,9 +4,6 @@
 
     Poisk-1 sound card
 
-    Copyright MESS Team.
-    Visit http://mamedev.org for licensing and usage restrictions.
-
 **********************************************************************/
 
 #ifndef MAME_BUS_P1_SOUND_H
@@ -45,14 +42,14 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// Optional information overrides
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 private:
-	DECLARE_WRITE_LINE_MEMBER(sampler_sync);
+	void sampler_sync(int state);
 
 	uint8_t m_dac_data[16];
 	int m_dac_ptr;

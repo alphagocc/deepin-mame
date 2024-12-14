@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders: kmg, Fabio Priuli
+// copyright-holders:kmg
 /***********************************************************************************************************
 
 
@@ -16,18 +16,18 @@
 
 
 #ifdef NES_PCB_DEBUG
-#define VERBOSE 1
+#define VERBOSE (LOG_GENERAL)
 #else
-#define VERBOSE 0
+#define VERBOSE (0)
 #endif
-
-#define LOG_MMC(x) do { if (VERBOSE) logerror x; } while (0)
+#include "logmacro.h"
 
 
 //-------------------------------------------------
 //  constructor
 //-------------------------------------------------
 
+DEFINE_DEVICE_TYPE(NES_BMC_JY012005,  nes_bmc_jy012005_device,  "nes_bmc_jy012005",  "NES Cart BMC JY012005 PCB")
 DEFINE_DEVICE_TYPE(NES_BMC_JY820845C, nes_bmc_jy820845c_device, "nes_bmc_jy820845c", "NES Cart BMC JY820845C PCB")
 DEFINE_DEVICE_TYPE(NES_FARID_SLROM,   nes_farid_slrom_device,   "nes_farid_slrom",   "NES Cart Farid SLROM 8 in 1 PCB")
 DEFINE_DEVICE_TYPE(NES_NINJARYU,      nes_ninjaryu_device,      "nes_ninjaryu",      "NES Cart Ninja Ryukenden Chinese PCB")
@@ -35,6 +35,11 @@ DEFINE_DEVICE_TYPE(NES_RESETSXROM,    nes_resetsxrom_device,    "nes_resetsxrom"
 DEFINE_DEVICE_TYPE(NES_SRPG_5IN1,     nes_srpg5in1_device,      "nes_srpg5in1",      "NES Cart Super RPG 5 in 1 PCB")
 DEFINE_DEVICE_TYPE(NES_TXC_22110,     nes_txc_22110_device,     "nes_txc_22110",     "NES Cart TXC 01-22110-000 PCB")
 
+
+nes_bmc_jy012005_device::nes_bmc_jy012005_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock)
+	: nes_sxrom_device(mconfig, NES_BMC_JY012005, tag, owner, clock), m_latch0(0)
+{
+}
 
 nes_bmc_jy820845c_device::nes_bmc_jy820845c_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock)
 	: nes_sxrom_device(mconfig, NES_BMC_JY820845C, tag, owner, clock), m_latch0(0), m_mode(0)
@@ -67,6 +72,18 @@ nes_txc_22110_device::nes_txc_22110_device(const machine_config &mconfig, const 
 }
 
 
+
+void nes_bmc_jy012005_device::device_start()
+{
+	nes_sxrom_device::device_start();
+	save_item(NAME(m_latch0));
+}
+
+void nes_bmc_jy012005_device::pcb_reset()
+{
+	m_latch0 = 0;
+	nes_sxrom_device::pcb_reset();
+}
 
 void nes_bmc_jy820845c_device::device_start()
 {
@@ -134,7 +151,6 @@ void nes_txc_22110_device::device_start()
 void nes_txc_22110_device::pcb_reset()
 {
 	nes_sxrom_device::pcb_reset();
-	set_nt_mirroring(PPU_MIRROR_VERT);
 
 	m_latch0 = 0;
 	m_mode = 0;
@@ -164,8 +180,8 @@ void nes_txc_22110_device::pcb_reset()
 
 void nes_ninjaryu_device::write_h(offs_t offset, u8 data)
 {
-	LOG_MMC(("unl_ninjaryu write_h, offset: %04x, data: %02x\n", offset, data));
-	u8 reg = (offset >> 13) & 0x03;
+	LOG("unl_ninjaryu write_h, offset: %04x, data: %02x\n", offset, data);
+	u8 reg = BIT(offset, 13, 2);
 	m_reg[reg] = data;
 	update_regs(reg);
 }
@@ -176,6 +192,43 @@ void nes_ninjaryu_device::write_h(offs_t offset, u8 data)
  MULTIGAME CARTS BASED ON MMC1
 
  -------------------------------------------------*/
+
+/*-------------------------------------------------
+
+ BMC-JY012005
+
+ Games: 1998 Super HiK 8 in 1 (JY-021B)
+
+ MMC1 clone with banking for multigame menu.
+
+ NES 2.0: mapper 404
+
+ In MAME: Supported.
+
+ -------------------------------------------------*/
+
+void nes_bmc_jy012005_device::set_prg()
+{
+	u8 mode = !BIT(m_latch0, 6);
+	nes_sxrom_device::set_prg((m_latch0 & 0x07 & ~mode) << 3, mode << 3 | 0x07);
+}
+
+void nes_bmc_jy012005_device::set_chr()
+{
+	nes_sxrom_device::set_chr((m_latch0 & 0x07) << 5, 0x1f);
+}
+
+void nes_bmc_jy012005_device::write_m(offs_t offset, u8 data)
+{
+	LOG("bmc_jy012005 write_m, offset: %04x, data: %02x\n", offset, data);
+
+	if (!BIT(m_latch0, 7))    // outer bank lock
+	{
+		m_latch0 = data;
+		set_prg();
+		set_chr();
+	}
+}
 
 /*-------------------------------------------------
 
@@ -199,7 +252,7 @@ void nes_bmc_jy820845c_device::update_banks()    // used by menu and MHROM games
 
 void nes_bmc_jy820845c_device::write_m(offs_t offset, u8 data)
 {
-	LOG_MMC(("bmc_jy820845c write_m, offset: %04x, data: %02x\n", offset, data));
+	LOG("bmc_jy820845c write_m, offset: %04x, data: %02x\n", offset, data);
 
 	nes_sxrom_device::write_m(offset, data);    // register overlaid on WRAM
 
@@ -218,7 +271,7 @@ void nes_bmc_jy820845c_device::write_m(offs_t offset, u8 data)
 
 void nes_bmc_jy820845c_device::write_h(offs_t offset, u8 data)
 {
-	LOG_MMC(("bmc_jy820845c write_h, offset: %04x, data: %02x\n", offset, data));
+	LOG("bmc_jy820845c write_h, offset: %04x, data: %02x\n", offset, data);
 
 	m_latch0 = data;
 
@@ -244,7 +297,7 @@ void nes_bmc_jy820845c_device::write_h(offs_t offset, u8 data)
 
 void nes_farid_slrom_device::write_m(offs_t offset, u8 data)
 {
-	LOG_MMC(("farid_slrom write_m, offset: %04x, data: %02x\n", offset, data));
+	LOG("farid_slrom write_m, offset: %04x, data: %02x\n", offset, data);
 	if (!BIT(m_reg[3], 4) && !BIT(m_outer, 3))    // MMC1 WRAM enabled and outer bank not locked
 		m_outer = data;
 }
@@ -288,7 +341,7 @@ void nes_farid_slrom_device::write_m(offs_t offset, u8 data)
 
 void nes_srpg5in1_device::write_l(offs_t offset, u8 data)
 {
-	LOG_MMC(("srpg5in1 write_l, offset: %04x, data: %02x\n", offset, data));
+	LOG("srpg5in1 write_l, offset: %04x, data: %02x\n", offset, data);
 
 	offset += 0x100;
 	if (offset >= 0x1000)
@@ -305,7 +358,7 @@ void nes_srpg5in1_device::write_l(offs_t offset, u8 data)
 
 void nes_srpg5in1_device::write_m(offs_t offset, u8 data)
 {
-	LOG_MMC(("srpg5in1 write_m, offset: %04x, data: %02x\n", offset, data));
+	LOG("srpg5in1 write_m, offset: %04x, data: %02x\n", offset, data);
 
 	u8 bank = BIT(m_outer, 1) ? bitswap<3>(m_outer, 1, 2, 0) : (m_outer & 1) << 1 | BIT(m_reg[1], 3);
 
@@ -315,7 +368,7 @@ void nes_srpg5in1_device::write_m(offs_t offset, u8 data)
 
 u8 nes_srpg5in1_device::read_m(offs_t offset)
 {
-	LOG_MMC(("srpg5in1 read_m, offset: %04x\n", offset));
+	LOG("srpg5in1 read_m, offset: %04x\n", offset);
 
 	u8 bank = BIT(m_outer, 1) ? bitswap<3>(m_outer, 1, 2, 0) : (m_outer & 1) << 1 | BIT(m_reg[1], 3);
 
@@ -344,14 +397,14 @@ u8 nes_srpg5in1_device::read_m(offs_t offset)
 void nes_txc_22110_device::update_banks()    // used by menu and Space Shadow
 {
 	u8 outer = (m_mode & 0x02) << 1;
-	prg16_89ab(outer | (m_latch0 & 0x30) >> 4);
+	prg16_89ab(outer | BIT(m_latch0, 4, 2));
 	prg16_cdef(outer | 3);
 	chr8(m_latch0 & 0x0f, CHRROM);
 }
 
 void nes_txc_22110_device::write_l(offs_t offset, u8 data)
 {
-	LOG_MMC(("TXC 22110 write_l, offset: %04x, data: %02x\n", offset, data));
+	LOG("TXC 22110 write_l, offset: %04x, data: %02x\n", offset, data);
 	if (offset < 0x100)        // $4100 - $41ff
 	{
 		m_mode = data;
@@ -367,7 +420,7 @@ void nes_txc_22110_device::write_l(offs_t offset, u8 data)
 
 void nes_txc_22110_device::write_h(offs_t offset, u8 data)
 {
-	LOG_MMC(("TXC 22110 write_h, offset: %04x, data: %02x\n", offset, data));
+	LOG("TXC 22110 write_h, offset: %04x, data: %02x\n", offset, data);
 
 	if (m_mode & 1)
 		nes_sxrom_device::write_h(offset, data);

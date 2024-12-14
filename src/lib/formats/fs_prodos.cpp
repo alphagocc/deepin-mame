@@ -3,24 +3,60 @@
 
 // Creation of Apple ProDOS floppy images
 
-#include "emu.h"
 #include "fs_prodos.h"
 #include "ap_dsk35.h"
+#include "ap2_dsk.h"
+#include "fsblk.h"
+
+#include "corestr.h"
+#include "multibyte.h"
+#include "strformat.h"
+
+#include <map>
+#include <stdexcept>
+
+using namespace fs;
+
+namespace fs { const prodos_image PRODOS; }
+
+namespace {
+class prodos_impl : public filesystem_t {
+public:
+	prodos_impl(fsblk_t &blockdev);
+	virtual ~prodos_impl() = default;
+
+	virtual meta_data volume_metadata() override;
+	virtual std::pair<err_t, meta_data> metadata(const std::vector<std::string> &path) override;
+
+	virtual std::pair<err_t, std::vector<dir_entry>> directory_contents(const std::vector<std::string> &path) override;
+
+	virtual std::pair<err_t, std::vector<u8>> file_read(const std::vector<std::string> &path) override;
+	virtual std::pair<err_t, std::vector<u8>> file_rsrc_read(const std::vector<std::string> &path) override;
+
+	virtual err_t format(const meta_data &meta) override;
+
+private:
+	static const u8 boot[512];
+	static util::arbitrary_datetime prodos_to_dt(u32 date);
+
+	std::tuple<fsblk_t::block_t, u32> path_find_step(const std::string &name, u16 block);
+	std::tuple<fsblk_t::block_t, u32, bool> path_find(const std::vector<std::string> &path);
+	std::pair<err_t, std::vector<u8>> any_read(u8 type, u16 block, u32 length);
+};
+}
 
 
-const fs_prodos FS_PRODOS;
-
-const char *fs_prodos::name() const
+const char *prodos_image::name() const
 {
 	return "prodos";
 }
 
-const char *fs_prodos::description() const
+const char *prodos_image::description() const
 {
 	return "Apple ProDOS";
 }
 
-const u8 fs_prodos::impl::boot[512] = {
+const u8 prodos_impl::boot[512] = {
 	0x01, 0x38, 0xb0, 0x03, 0x4c, 0x1c, 0x09, 0x78, 0x86, 0x43, 0xc9, 0x03, 0x08, 0x8a, 0x29, 0x70,
 	0x4a, 0x4a, 0x4a, 0x4a, 0x09, 0xc0, 0x85, 0x49, 0xa0, 0xff, 0x84, 0x48, 0x28, 0xc8, 0xb1, 0x48,
 	0xd0, 0x3a, 0xb0, 0x0e, 0xa9, 0x03, 0x8d, 0x00, 0x08, 0xe6, 0x3d, 0xa5, 0x49, 0x48, 0xa9, 0x5b,
@@ -55,88 +91,128 @@ const u8 fs_prodos::impl::boot[512] = {
 	0xf0, 0xf5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-void fs_prodos::enumerate_f(floppy_enumerator &fe, uint32_t form_factor, const std::vector<uint32_t> &variants) const
+void prodos_image::enumerate_f(floppy_enumerator &fe) const
 {
-	if(has(form_factor, variants, floppy_image::FF_35, floppy_image::DSDD))
-		fe.add(FLOPPY_APPLE_GCR_FORMAT, 819200, "prodos_800k", "Apple ProDOS 800K");
-	if(has(form_factor, variants, floppy_image::FF_35, floppy_image::SSDD))
-		fe.add(FLOPPY_APPLE_GCR_FORMAT, 409600, "prodos_400k", "Apple ProDOS 400K");
+	fe.add(FLOPPY_APPLE_GCR_FORMAT, floppy_image::FF_35, floppy_image::DSDD, 819200, "prodos_800k", "Apple ProDOS 3.5\" 800K");
+	fe.add(FLOPPY_APPLE_GCR_FORMAT, floppy_image::FF_35, floppy_image::SSDD, 409600, "prodos_400k", "Apple ProDOS 3.5\" 400K");
+	fe.add(FLOPPY_A216S_PRODOS_FORMAT, floppy_image::FF_525, floppy_image::SSSD, 143360, "prodos_140k", "Apple ProDOS 5.25\" 140K");
 }
 
-std::unique_ptr<filesystem_t> fs_prodos::mount(fsblk_t &blockdev) const
+std::unique_ptr<filesystem_t> prodos_image::mount(fsblk_t &blockdev) const
 {
-	return std::make_unique<impl>(blockdev);
+	return std::make_unique<prodos_impl>(blockdev);
 }
 
-bool fs_prodos::can_format() const
-{
-	return true;
-}
-
-bool fs_prodos::can_read() const
+bool prodos_image::can_format() const
 {
 	return true;
 }
 
-bool fs_prodos::can_write() const
+bool prodos_image::can_read() const
+{
+	return true;
+}
+
+bool prodos_image::can_write() const
 {
 	return false;
 }
 
-bool fs_prodos::has_rsrc() const
+bool prodos_image::has_rsrc() const
 {
 	return true;
 }
 
-char fs_prodos::directory_separator() const
+char prodos_image::directory_separator() const
 {
 	return '/';
 }
 
-std::vector<fs_meta_description> fs_prodos::volume_meta_description() const
+// TODO: this list is incomplete
+static const std::map<u8, const char *> s_file_types =
 {
-	std::vector<fs_meta_description> res;
-	res.emplace_back(fs_meta_description(fs_meta_name::name, fs_meta_type::string, "UNTITLED", false, [](const fs_meta &m) { return m.as_string().size() <= 15; }, "Volume name, up to 15 characters"));
-	res.emplace_back(fs_meta_description(fs_meta_name::os_version, fs_meta_type::number, 5, false, [](const fs_meta &m) { return m.as_number() <= 255; }, "Creator OS version"));
-	res.emplace_back(fs_meta_description(fs_meta_name::os_minimum_version, fs_meta_type::number, 5, false, [](const fs_meta &m) { return m.as_number() <= 255; }, "Minimum OS version"));
+	{ 0x00, "UNK" },
+	{ 0x01, "BAD" },
+	{ 0x04, "TXT" },
+	{ 0x06, "BIN" },
+	{ 0x0f, "DIR" },
+	{ 0x19, "ADB" },
+	{ 0x1a, "AWP" },
+	{ 0x1b, "ASP" },
+	{ 0xc9, "FND" },
+	{ 0xca, "ICN" },
+	{ 0xef, "PAS" },
+	{ 0xf0, "CMD" },
+	{ 0xfa, "INT" },
+	{ 0xfb, "IVR" },
+	{ 0xfc, "BAS" },
+	{ 0xfd, "VAR" },
+	{ 0xfe, "REL" },
+	{ 0xff, "SYS" }
+};
+
+static std::string file_type_to_string(uint8_t type)
+{
+	auto res = s_file_types.find(type);
+	if (res != s_file_types.end())
+		return res->second;
+	else
+		return util::string_format("0x%02x", type);
+}
+
+static bool validate_file_type(std::string str)
+{
+	if ((str.length() == 3 || str.length() == 4) && str[0] == '0' && (str[1] == 'x' || str[1] == 'X'))
+		return str.find_first_not_of("0123456789ABCDEFabcdef", 2) == std::string::npos;
+	else
+		return std::any_of(s_file_types.begin(), s_file_types.end(), [&str](const auto &pair) { return util::strequpper(str, pair.second); });
+}
+
+std::vector<meta_description> prodos_image::volume_meta_description() const
+{
+	std::vector<meta_description> res;
+	res.emplace_back(meta_description(meta_name::name, "UNTITLED", false, [](const meta_value &m) { return m.as_string().size() <= 15; }, "Volume name, up to 15 characters"));
+	res.emplace_back(meta_description(meta_name::os_version, 5, false, [](const meta_value &m) { return m.as_number() <= 255; }, "Creator OS version"));
+	res.emplace_back(meta_description(meta_name::os_minimum_version, 5, false, [](const meta_value &m) { return m.as_number() <= 255; }, "Minimum OS version"));
 
 	auto now = util::arbitrary_datetime::now();
-	res.emplace_back(fs_meta_description(fs_meta_name::creation_date, fs_meta_type::date, now, false, nullptr, "Creation time"));
-	res.emplace_back(fs_meta_description(fs_meta_name::modification_date, fs_meta_type::date, now, false, nullptr, "Modification time"));
+	res.emplace_back(meta_description(meta_name::creation_date, now, false, nullptr, "Creation time"));
+	res.emplace_back(meta_description(meta_name::modification_date, now, false, nullptr, "Modification time"));
 	return res;
 }
 
-std::vector<fs_meta_description> fs_prodos::file_meta_description() const
+std::vector<meta_description> prodos_image::file_meta_description() const
 {
-	std::vector<fs_meta_description> res;
-	res.emplace_back(fs_meta_description(fs_meta_name::name, fs_meta_type::string, "Empty file", false, [](const fs_meta &m) { return m.as_string().size() <= 15; }, "File name, up to 15 characters"));
-	res.emplace_back(fs_meta_description(fs_meta_name::length, fs_meta_type::number, 0, true, nullptr, "Size of the file in bytes"));
-	res.emplace_back(fs_meta_description(fs_meta_name::rsrc_length, fs_meta_type::number, 0, true, nullptr, "Size of the resource fork in bytes"));
-	res.emplace_back(fs_meta_description(fs_meta_name::os_version, fs_meta_type::number, 5, false, [](const fs_meta &m) { return m.as_number() <= 255; }, "Creator OS version"));
-	res.emplace_back(fs_meta_description(fs_meta_name::os_minimum_version, fs_meta_type::number, 5, false, [](const fs_meta &m) { return m.as_number() <= 255; }, "Minimum OS version"));
+	std::vector<meta_description> res;
+	res.emplace_back(meta_description(meta_name::name, "Empty file", false, [](const meta_value &m) { return m.as_string().size() <= 15; }, "File name, up to 15 characters"));
+	res.emplace_back(meta_description(meta_name::length, 0, true, nullptr, "Size of the file in bytes"));
+	res.emplace_back(meta_description(meta_name::rsrc_length, 0, true, nullptr, "Size of the resource fork in bytes"));
+	res.emplace_back(meta_description(meta_name::file_type, "UNK", false, [](const meta_value &m) { return validate_file_type(m.as_string()); }, "File type, 3 letters or hex code preceded by 0x"));
+	res.emplace_back(meta_description(meta_name::os_version, 5, false, [](const meta_value &m) { return m.as_number() <= 255; }, "Creator OS version"));
+	res.emplace_back(meta_description(meta_name::os_minimum_version, 5, false, [](const meta_value &m) { return m.as_number() <= 255; }, "Minimum OS version"));
 
 	auto now = util::arbitrary_datetime::now();
-	res.emplace_back(fs_meta_description(fs_meta_name::creation_date, fs_meta_type::date, now, false, nullptr, "Creation time"));
-	res.emplace_back(fs_meta_description(fs_meta_name::modification_date, fs_meta_type::date, now, false, nullptr, "Modification time"));
+	res.emplace_back(meta_description(meta_name::creation_date, now, false, nullptr, "Creation time"));
+	res.emplace_back(meta_description(meta_name::modification_date, now, false, nullptr, "Modification time"));
 	return res;
 }
 
-std::vector<fs_meta_description> fs_prodos::directory_meta_description() const
+std::vector<meta_description> prodos_image::directory_meta_description() const
 {
-	std::vector<fs_meta_description> res;
-	res.emplace_back(fs_meta_description(fs_meta_name::name, fs_meta_type::string, "Empty directory", false, [](const fs_meta &m) { return m.as_string().size() <= 15; }, "Directory name, up to 15 characters"));
-	res.emplace_back(fs_meta_description(fs_meta_name::os_version, fs_meta_type::number, 5, false, [](const fs_meta &m) { return m.as_number() <= 255; }, "Creator OS version"));
-	res.emplace_back(fs_meta_description(fs_meta_name::os_minimum_version, fs_meta_type::number, 5, false, [](const fs_meta &m) { return m.as_number() <= 255; }, "Minimum OS version"));
+	std::vector<meta_description> res;
+	res.emplace_back(meta_description(meta_name::name, "Empty directory", false, [](const meta_value &m) { return m.as_string().size() <= 15; }, "Directory name, up to 15 characters"));
+	res.emplace_back(meta_description(meta_name::os_version, 5, false, [](const meta_value &m) { return m.as_number() <= 255; }, "Creator OS version"));
+	res.emplace_back(meta_description(meta_name::os_minimum_version, 5, false, [](const meta_value &m) { return m.as_number() <= 255; }, "Minimum OS version"));
 
 	auto now = util::arbitrary_datetime::now();
-	res.emplace_back(fs_meta_description(fs_meta_name::creation_date, fs_meta_type::date, now, false, nullptr, "Creation time"));
-	res.emplace_back(fs_meta_description(fs_meta_name::modification_date, fs_meta_type::date, now, false, nullptr, "Modification time"));
+	res.emplace_back(meta_description(meta_name::creation_date, now, false, nullptr, "Creation time"));
+	res.emplace_back(meta_description(meta_name::modification_date, now, false, nullptr, "Modification time"));
 	return res;
 }
 
-void fs_prodos::impl::format(const fs_meta_data &meta)
+err_t prodos_impl::format(const meta_data &meta)
 {
-	std::string volume_name = meta.get_string(fs_meta_name::name, "UNTITLED");
+	std::string volume_name = meta.get_string(meta_name::name, "UNTITLED");
 	u32 blocks = m_blockdev.block_count();
 
 	// Maximum usable partition size = 32M - 512 bytes (65535 blocks)
@@ -198,20 +274,21 @@ void fs_prodos::impl::format(const fs_meta_data &meta)
 				memset(fdata+sb, 0xff, eb-sb-1);
 		}
 	}
+	return ERR_OK;
 }
 
-fs_prodos::impl::impl(fsblk_t &blockdev) : filesystem_t(blockdev, 512), m_root(true)
+prodos_impl::prodos_impl(fsblk_t &blockdev) : filesystem_t(blockdev, 512)
 {
 }
 
-util::arbitrary_datetime fs_prodos::impl::prodos_to_dt(u32 date)
+util::arbitrary_datetime prodos_impl::prodos_to_dt(u32 date)
 {
 	util::arbitrary_datetime dt;
 	dt.second       = 0;
 	dt.minute       = ((date >> 16) & 0x3f);
 	dt.hour         = ((date >> 24) & 0x1f);
-	dt.day_of_month = ((date >> 0) & 0x1f);
-	dt.month        = ((date >> 5) & 0x0f) + 1;
+	dt.day_of_month = ((date >> 0) & 0x1f); // 1-based
+	dt.month        = ((date >> 5) & 0x0f); // 1-based
 	dt.year         = ((date >> 9) & 0x7f) + 1900;
 	if (dt.year <= 1949)
 		dt.year += 100;
@@ -219,213 +296,178 @@ util::arbitrary_datetime fs_prodos::impl::prodos_to_dt(u32 date)
 	return dt;
 }
 
-fs_meta_data fs_prodos::impl::metadata()
+meta_data prodos_impl::volume_metadata()
 {
-	fs_meta_data res;
+	meta_data res;
 	auto bdir = m_blockdev.get(2);
 	int len = bdir.r8(0x04) & 0xf;
-	res.set(fs_meta_name::name, bdir.rstr(0x05, len));
-	res.set(fs_meta_name::os_version, bdir.r8(0x20));
-	res.set(fs_meta_name::os_minimum_version, bdir.r8(0x21));
-	res.set(fs_meta_name::creation_date, prodos_to_dt(bdir.r32l(0x1c)));
-	res.set(fs_meta_name::modification_date, prodos_to_dt(bdir.r32l(0x16)));
+	res.set(meta_name::name, bdir.rstr(0x05, len));
+	res.set(meta_name::os_version, bdir.r8(0x20));
+	res.set(meta_name::os_minimum_version, bdir.r8(0x21));
+	res.set(meta_name::creation_date, prodos_to_dt(bdir.r32l(0x1c)));
+	res.set(meta_name::modification_date, prodos_to_dt(bdir.r32l(0x16)));
 	return res;
 }
 
-filesystem_t::dir_t fs_prodos::impl::root()
+std::pair<err_t, std::vector<dir_entry>> prodos_impl::directory_contents(const std::vector<std::string> &path)
 {
-	if(!m_root)
-		m_root = new root_dir(*this, 2);
-	return m_root.strong();
-}
+	u16 block;
+	if(path.empty())
+		block = 2;
 
-void fs_prodos::impl::drop_root_ref()
-{
-	m_root = nullptr;
-}
+	else {
+		auto [blk, off, dir] = path_find(path);
+		if(!off || !dir)
+			return std::make_pair(ERR_NOT_FOUND, std::vector<dir_entry>());
+		block = blk.r16l(off+0x11);
+	}
 
+	std::vector<dir_entry> res;
 
-void fs_prodos::impl::root_dir::drop_weak_references()
-{
-	if(m_base_block == 2)
-		m_fs.drop_root_ref();
-}
-
-fs_meta_data fs_prodos::impl::root_dir::metadata()
-{
-	return fs_meta_data();
-}
-
-std::vector<fs_dir_entry> fs_prodos::impl::root_dir::contents()
-{
-	std::vector<fs_dir_entry> res;
-
-	u16 block = m_base_block;
-	u32 off = 39 + 4;
-	u32 id = 1;
 	do {
-		auto blk = m_fs.m_blockdev.get(block);
-		while(off < 511) {
+		auto blk = m_blockdev.get(block);
+		for(u32 off = 4; off < 511; off += 39) {
 			u8 type = blk.r8(off);
-			auto name = blk.rstr(off+1, type & 0xf);
-			type >>= 4;
-			if(type == 0xd)
-				res.emplace_back(fs_dir_entry(name, fs_dir_entry_type::dir, id));
-			else if(type != 0)
-				res.emplace_back(fs_dir_entry(name, fs_dir_entry_type::file, id));
-			off += 39;
-			id ++;
+			// skip inactive entries and subroutine/volume headers
+			if(type != 0 && type < 0xe0) {
+				meta_data meta;
+				meta.set(meta_name::name, blk.rstr(off+1, type & 0xf));
+				type >>= 4;
+
+				if(type == 5) {
+					auto rootblk = m_blockdev.get(blk.r16l(off+0x11));
+					meta.set(meta_name::length, rootblk.r24l(0x005));
+					meta.set(meta_name::rsrc_length, rootblk.r24l(0x105));
+
+				} else if(type >= 1 && type <= 3) {
+					meta.set(meta_name::length, blk.r24l(off + 0x15));
+					meta.set(meta_name::file_type, file_type_to_string(blk.r8(off + 0x10)));
+				}
+
+				meta.set(meta_name::os_version, blk.r8(off + 0x1c));
+				meta.set(meta_name::os_minimum_version, blk.r8(off + 0x1d));
+				meta.set(meta_name::creation_date, prodos_to_dt(blk.r32l(off + 0x18)));
+				meta.set(meta_name::modification_date, prodos_to_dt(blk.r32l(off + 0x21)));
+
+				res.emplace_back(dir_entry(type == 0xd ? dir_entry_type::dir : dir_entry_type::file, meta));
+			}
 		}
 		block = blk.r16l(2);
-		if(block >= m_fs.m_blockdev.block_count())
+		if(block >= m_blockdev.block_count())
 			break;
-		off = 4;
 	} while(block);
-	return res;
+	return std::make_pair(ERR_OK, res);
 }
 
-
-std::pair<fsblk_t::block_t, const u8 *> fs_prodos::impl::root_dir::get_entry_ro(uint64_t key)
+std::tuple<fsblk_t::block_t, u32> prodos_impl::path_find_step(const std::string &name, u16 block)
 {
-	std::pair<fsblk_t::block_t, const u8 *> res;
-	res.first = m_fs.m_blockdev.get(m_base_block);
-	while(key >= 13) {
-		key -= 13;
-		u16 block = res.first.r16l(2);
-		if(!block || block >= m_fs.m_blockdev.block_count()) {
-			res.first = nullptr;
-			res.second = nullptr;
-			return res;
+	for(;;) {
+		auto blk = m_blockdev.get(block);
+		for(u32 off = 4; off < 511; off += 39) {
+			u8 type = blk.r8(off);
+			if(type != 0 && type < 0xe0 && name == blk.rstr(off+1, type & 0xf))
+				return std::make_tuple(blk, off);
 		}
-		res.first = m_fs.m_blockdev.get(block);
+		block = blk.r16l(2);
+		if(!block || block >= m_blockdev.block_count())
+			return std::make_tuple(blk, 0U);
 	}
-	res.second = res.first.rodata() + 4 + 39 * key;
-	return res;
 }
 
-std::pair<fsblk_t::block_t, u8 *> fs_prodos::impl::root_dir::get_entry(uint64_t key)
+std::tuple<fsblk_t::block_t, u32, bool> prodos_impl::path_find(const std::vector<std::string> &path)
 {
-	std::pair<fsblk_t::block_t, u8 *> res;
-	res.first = m_fs.m_blockdev.get(m_base_block);
-	while(key > 13) {
-		key -= 13;
-		u16 block = res.first.r16l(2);
-		if(!block || block >= m_fs.m_blockdev.block_count()) {
-			res.first = nullptr;
-			res.second = nullptr;
-			return res;
-		}
-		res.first = m_fs.m_blockdev.get(block);
+	if(path.size() == 0)
+		return std::tuple<fsblk_t::block_t, u32, bool>(fsblk_t::block_t(), 0, false);
+
+	u16 block = 2;
+	for(u32 pathc = 0;; pathc++) {
+		auto [blk, off] = path_find_step(path[pathc], block);
+		if(!off)
+			return std::make_tuple(blk, off, false);
+
+		if(pathc + 1 == path.size())
+			return std::make_tuple(blk, off, (blk.r8(off) & 0xf0) == 0xd0);
+
+		if((blk.r8(off) & 0xf0) != 0xd0)
+			return std::make_tuple(blk, 0U, false);
+
+		block = blk.r16l(off + 0x11);
 	}
-	res.second = res.first.data() + 4 + 39 * key;
-	return res;
 }
 
-filesystem_t::file_t fs_prodos::impl::root_dir::file_get(uint64_t key)
+
+std::pair<err_t, meta_data> prodos_impl::metadata(const std::vector<std::string> &path)
 {
-	auto [blk, entry] = get_entry_ro(key);
-	if(!blk)
-		fatalerror("Out-of-range key on file_get\n");
-	u8 type = entry[0] >> 4;
-	if(type == 0 || type == 4 || type > 5)
-		fatalerror("Unhandled file type %x\n", type);
-	return new file(m_fs, entry, key, this);
+	if(path.size() == 0)
+		return std::make_pair(ERR_OK, meta_data());
+
+	auto [blk, off, dir] = path_find(path);
+
+	if(!off)
+		return std::make_pair(ERR_NOT_FOUND, meta_data());
+
+	const u8 *entry = blk.rodata() + off;
+
+	meta_data res;
+	if(dir) {
+		u8 type = entry[0];
+		std::string_view name = rstr(entry+1, type & 0xf);
+		res.set(meta_name::name, name);
+	} else {
+		u8 type = entry[0];
+		std::string_view name = rstr(entry+1, type & 0xf);
+		type >>= 4;
+		res.set(meta_name::name, name);
+		if(type == 5) {
+			auto rootblk = m_blockdev.get(get_u16le(entry+0x11));
+			res.set(meta_name::length, rootblk.r24l(0x005));
+			res.set(meta_name::rsrc_length, rootblk.r24l(0x105));
+
+		} else if(type >= 1 && type <= 3)
+			res.set(meta_name::length, get_u24le(entry + 0x15));
+
+		else
+			return std::make_pair(ERR_UNSUPPORTED, meta_data());
+	}
+
+	return std::make_pair(ERR_OK, res);
 }
 
-filesystem_t::dir_t fs_prodos::impl::root_dir::dir_get(uint64_t key)
+std::pair<err_t, std::vector<u8>> prodos_impl::any_read(u8 type, u16 block, u32 length)
 {
-	auto [blk, entry] = get_entry_ro(key);
-	if(!blk)
-		fatalerror("Out-of-range key on dir_get\n");
-	u8 type = entry[0] >> 4;
-	if(type != 0xd)
-		fatalerror("Unhandled directory type %x\n", type);
-
-	return new dir(m_fs, entry, r16l(entry+0x11), key, this);
-}
-
-fs_prodos::impl::dir::dir(impl &fs, const u8 *entry, u16 base_block, u16 key, root_dir *parent_dir) : root_dir(fs, base_block), m_parent_dir(parent_dir), m_key(key)
-{
-	memcpy(m_entry, entry, 39);
-	(void)m_key;
-	(void)m_parent_dir;
-}
-
-fs_prodos::impl::file::file(impl &fs, const u8 *entry, u16 key, root_dir *parent_dir) : m_fs(fs), m_parent_dir(parent_dir), m_key(key)
-{
-	memcpy(m_entry, entry, 39);
-	(void)m_key;
-	(void)m_parent_dir;
-}
-
-void fs_prodos::impl::file::drop_weak_references()
-{
-}
-
-fs_meta_data fs_prodos::impl::file::metadata()
-{
-	fs_meta_data res;
-	u8 type = r8(m_entry);
-	std::string name = rstr(m_entry+1, type & 0xf);
-	type >>= 4;
-	res.set(fs_meta_name::name, name);
-	if(type == 5) {
-		auto rootblk = m_fs.m_blockdev.get(r16l(m_entry+0x11));
-		res.set(fs_meta_name::length, rootblk.r24l(0x005));
-		res.set(fs_meta_name::rsrc_length, rootblk.r24l(0x105));
-
-	} else if(type >= 1 && type <= 3)
-		res.set(fs_meta_name::length, r24l(m_entry + 0x15));
-
-	else
-		fatalerror("fs_prodos::impl::file::metadata: Unhandled file type %d\n", type);
-
-	return res;
-}
-
-fs_meta_data fs_prodos::impl::dir::metadata()
-{
-	fs_meta_data res;
-	u8 type = r8(m_entry);
-	std::string name = rstr(m_entry+1, type & 0xf);
-	res.set(fs_meta_name::name, name);
-
-	return res;
-}
-
-std::vector<u8> fs_prodos::impl::file::any_read_all(uint8_t type, u16 block, u32 length)
-{
-	std::vector<u8> data((length + 511) & ~511);
-	u32 nb = data.size()/512;
+	std::pair<err_t, std::vector<u8>> data;
+	data.first = ERR_OK;
+	data.second.resize((length + 511) & ~511);
+	u32 nb = data.second.size()/512;
 	if(!nb)
 		return data;
 
-	u8 *dst = data.data();
-	u8 *end = dst + data.size();
+	u8 *dst = data.second.data();
+	u8 *end = dst + data.second.size();
 	switch(type) {
 	case 1:
-		memcpy(dst, m_fs.m_blockdev.get(block).rodata(), 512);
+		memcpy(dst, m_blockdev.get(block).rodata(), 512);
 		dst += 512;
 		break;
 
 	case 2: {
-		auto iblk = m_fs.m_blockdev.get(block);
+		auto iblk = m_blockdev.get(block);
 		for(u32 i=0; i != 256 && dst != end; i++) {
 			u16 blk = iblk.r8(i) | (iblk.r8(i | 0x100) << 8);
-			memcpy(dst, m_fs.m_blockdev.get(blk).rodata(), 512);
+			memcpy(dst, m_blockdev.get(blk).rodata(), 512);
 			dst += 512;
 		}
 		break;
 	}
 
 	case 3: {
-		auto mblk = m_fs.m_blockdev.get(block);
+		auto mblk = m_blockdev.get(block);
 		for(u32 j=0; dst != end; j += 256) {
 			u32 idx = j/256;
-			auto iblk = m_fs.m_blockdev.get(mblk.r8(idx) | (mblk.r8(idx | 0x100) << 8));
+			auto iblk = m_blockdev.get(mblk.r8(idx) | (mblk.r8(idx | 0x100) << 8));
 			for(u32 i=0; i != 256 && dst != end; i++) {
 				u16 blk = iblk.r8(i) | (iblk.r8(i | 0x100) << 8);
-				memcpy(dst, m_fs.m_blockdev.get(blk).rodata(), 512);
+				memcpy(dst, m_blockdev.get(blk).rodata(), 512);
 				dst += 512;
 			}
 		}
@@ -433,35 +475,48 @@ std::vector<u8> fs_prodos::impl::file::any_read_all(uint8_t type, u16 block, u32
 	}
 
 	default:
-		fatalerror("fs_prodos::impl::file::get_file_blocks: unknown file type %d\n", type);
+		data.first = ERR_UNSUPPORTED;
+		data.second.clear();
+		return data;
 	}
 
-	data.resize(length);
+	data.second.resize(length);
 	return data;
 }
 
-std::vector<u8> fs_prodos::impl::file::read_all()
+std::pair<err_t, std::vector<u8>> prodos_impl::file_read(const std::vector<std::string> &path)
 {
-	u8 type = r8(m_entry) >> 4;
+	auto [blk, off, dir] = path_find(path);
+	if(!off || dir)
+		return std::make_pair(ERR_NOT_FOUND, std::vector<u8>());
+
+	const u8 *entry = blk.rodata() + off;
+	u8 type = entry[0] >> 4;
+
 	if(type >= 1 && type <= 3)
-		return any_read_all(type, r16l(m_entry+0x11), r24l(m_entry + 0x15));
+		return any_read(type, get_u16le(entry+0x11), get_u24le(entry + 0x15));
 
 	else if(type == 5) {
-		auto kblk = m_fs.m_blockdev.get(r16l(m_entry+0x11));
-		return any_read_all(kblk.r8(0x000), kblk.r16l(0x001), kblk.r24l(0x005));
+		auto kblk = m_blockdev.get(get_u16le(entry+0x11));
+		return any_read(kblk.r8(0x000), kblk.r16l(0x001), kblk.r24l(0x005));
 
 	} else
-		fatalerror("fs_prodos::impl::file::read_all: Unhandled file type %d\n", type);
+		return std::make_pair(ERR_UNSUPPORTED, std::vector<u8>());
 }
 
-std::vector<u8> fs_prodos::impl::file::rsrc_read_all()
+std::pair<err_t, std::vector<u8>> prodos_impl::file_rsrc_read(const std::vector<std::string> &path)
 {
-	u8 type = r8(m_entry) >> 4;
+	auto [blk, off, dir] = path_find(path);
+	if(!off || dir)
+		return std::make_pair(ERR_NOT_FOUND, std::vector<u8>());
+
+	const u8 *entry = blk.rodata() + off;
+	u8 type = entry[0] >> 4;
 
 	if(type == 5) {
-		auto kblk = m_fs.m_blockdev.get(r16l(m_entry+0x11));
-		return any_read_all(kblk.r8(0x100), kblk.r16l(0x101), kblk.r24l(0x105));
+		auto kblk = m_blockdev.get(get_u16le(entry+0x11));
+		return any_read(kblk.r8(0x100), kblk.r16l(0x101), kblk.r24l(0x105));
 
 	} else
-		fatalerror("fs_prodos::impl::file::rsrc_blocks: Unhandled file type %d\n", type);
+		return std::make_pair(ERR_UNSUPPORTED, std::vector<u8>());
 }

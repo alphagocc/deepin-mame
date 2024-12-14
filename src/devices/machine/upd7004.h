@@ -48,8 +48,9 @@ public:
 	void write(offs_t offset, uint8_t data);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(update_state);
 
 private:
 	// callbacks

@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:Aaron Giles
+// copyright-holders:Olivier Galibert
 /*********************************************************
 
     Konami 054539 PCM Sound Chip
@@ -60,17 +60,18 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 	virtual void device_clock_changed() override;
-	virtual void device_reset() override;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_post_load() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
 
 	// device_sound_interface overrides
 	virtual void sound_stream_update(sound_stream &stream, std::vector<read_stream_view> const &inputs, std::vector<write_stream_view> &outputs) override;
 
 	// device_rom_interface overrides
-	virtual void rom_bank_updated() override;
+	virtual void rom_bank_pre_change() override;
+
+	TIMER_CALLBACK_MEMBER(call_timer_handler);
 
 private:
 	struct channel {
@@ -92,7 +93,6 @@ private:
 	int reverb_pos;
 
 	int32_t cur_ptr;
-	int cur_limit;
 	uint32_t rom_addr;
 
 	channel channels[8];

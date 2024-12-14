@@ -1,25 +1,7 @@
-// AsmJit - Machine code generation for C++
+// This file is part of AsmJit project <https://asmjit.com>
 //
-//  * Official AsmJit Home Page: https://asmjit.com
-//  * Official Github Repository: https://github.com/asmjit/asmjit
-//
-// Copyright (c) 2008-2020 The AsmJit Authors
-//
-// This software is provided 'as-is', without any express or implied
-// warranty. In no event will the authors be held liable for any damages
-// arising from the use of this software.
-//
-// Permission is granted to anyone to use this software for any purpose,
-// including commercial applications, and to alter it and redistribute it
-// freely, subject to the following restrictions:
-//
-// 1. The origin of this software must not be misrepresented; you must not
-//    claim that you wrote the original software. If you use this software
-//    in a product, an acknowledgment in the product documentation would be
-//    appreciated but is not required.
-// 2. Altered source versions must be plainly marked as such, and must not be
-//    misrepresented as being the original software.
-// 3. This notice may not be removed or altered from any source distribution.
+// See asmjit.h or LICENSE.md for license and copyright information
+// SPDX-License-Identifier: Zlib
 
 #include "../core/api-build_p.h"
 #include "../core/support.h"
@@ -28,9 +10,8 @@
 
 ASMJIT_BEGIN_NAMESPACE
 
-// ============================================================================
-// [asmjit::ZoneVectorBase - Helpers]
-// ============================================================================
+// ZoneVectorBase - Helpers
+// ========================
 
 Error ZoneVectorBase::_grow(ZoneAllocator* allocator, uint32_t sizeOfT, uint32_t n) noexcept {
   uint32_t threshold = Globals::kGrowThreshold / sizeOfT;
@@ -71,7 +52,8 @@ Error ZoneVectorBase::_grow(ZoneAllocator* allocator, uint32_t sizeOfT, uint32_t
 
 Error ZoneVectorBase::_reserve(ZoneAllocator* allocator, uint32_t sizeOfT, uint32_t n) noexcept {
   uint32_t oldCapacity = _capacity;
-  if (oldCapacity >= n) return kErrorOk;
+  if (oldCapacity >= n)
+    return kErrorOk;
 
   uint32_t nBytes = n * sizeOfT;
   if (ASMJIT_UNLIKELY(nBytes < n))
@@ -84,11 +66,10 @@ Error ZoneVectorBase::_reserve(ZoneAllocator* allocator, uint32_t sizeOfT, uint3
     return DebugUtils::errored(kErrorOutOfMemory);
 
   void* oldData = _data;
-  if (_size)
+  if (oldData && _size) {
     memcpy(newData, oldData, size_t(_size) * sizeOfT);
-
-  if (oldData)
     allocator->release(oldData, size_t(oldCapacity) * sizeOfT);
+  }
 
   _capacity = uint32_t(allocatedBytes / sizeOfT);
   ASMJIT_ASSERT(_capacity >= n);
@@ -112,9 +93,8 @@ Error ZoneVectorBase::_resize(ZoneAllocator* allocator, uint32_t sizeOfT, uint32
   return kErrorOk;
 }
 
-// ============================================================================
-// [asmjit::ZoneBitVector - Ops]
-// ============================================================================
+// ZoneBitVector - Operations
+// ==========================
 
 Error ZoneBitVector::copyFrom(ZoneAllocator* allocator, const ZoneBitVector& other) noexcept {
   BitWord* data = _data;
@@ -126,7 +106,7 @@ Error ZoneBitVector::copyFrom(ZoneAllocator* allocator, const ZoneBitVector& oth
   }
 
   if (newSize > _capacity) {
-    // Realloc needed... Calculate the minimum capacity (in bytes) requied.
+    // Realloc needed... Calculate the minimum capacity (in bytes) required.
     uint32_t minimumCapacityInBits = Support::alignUp<uint32_t>(newSize, kBitWordSizeInBits);
     if (ASMJIT_UNLIKELY(minimumCapacityInBits < newSize))
       return DebugUtils::errored(kErrorOutOfMemory);
@@ -186,7 +166,7 @@ Error ZoneBitVector::_resize(ZoneAllocator* allocator, uint32_t newSize, uint32_
   BitWord* data = _data;
 
   if (newSize > _capacity) {
-    // Realloc needed, calculate the minimum capacity (in bytes) requied.
+    // Realloc needed, calculate the minimum capacity (in bytes) required.
     uint32_t minimumCapacityInBits = Support::alignUp<uint32_t>(idealCapacity, kBitWordSizeInBits);
 
     if (ASMJIT_UNLIKELY(minimumCapacityInBits < newSize))
@@ -280,9 +260,8 @@ Error ZoneBitVector::_append(ZoneAllocator* allocator, bool value) noexcept {
   return _resize(allocator, newSize, idealCapacity, value);
 }
 
-// ============================================================================
-// [asmjit::ZoneVector / ZoneBitVector - Unit]
-// ============================================================================
+// ZoneVector / ZoneBitVector - Tests
+// ==================================
 
 #if defined(ASMJIT_TEST)
 template<typename T>
@@ -293,24 +272,39 @@ static void test_zone_vector(ZoneAllocator* allocator, const char* typeName) {
   ZoneVector<T> vec;
 
   INFO("ZoneVector<%s> basic tests", typeName);
-  EXPECT(vec.append(allocator, 0) == kErrorOk);
-  EXPECT(vec.empty() == false);
-  EXPECT(vec.size() == 1);
-  EXPECT(vec.capacity() >= 1);
-  EXPECT(vec.indexOf(0) == 0);
-  EXPECT(vec.indexOf(-11) == Globals::kNotFound);
+  EXPECT_EQ(vec.append(allocator, 0), kErrorOk);
+  EXPECT_FALSE(vec.empty());
+  EXPECT_EQ(vec.size(), 1u);
+  EXPECT_GE(vec.capacity(), 1u);
+  EXPECT_EQ(vec.indexOf(0), 0u);
+  EXPECT_EQ(vec.indexOf(-11), Globals::kNotFound);
 
   vec.clear();
-  EXPECT(vec.empty());
-  EXPECT(vec.size() == 0);
-  EXPECT(vec.indexOf(0) == Globals::kNotFound);
+  EXPECT_TRUE(vec.empty());
+  EXPECT_EQ(vec.size(), 0u);
+  EXPECT_EQ(vec.indexOf(0), Globals::kNotFound);
 
   for (i = 0; i < kMax; i++) {
-    EXPECT(vec.append(allocator, T(i)) == kErrorOk);
+    EXPECT_EQ(vec.append(allocator, T(i)), kErrorOk);
   }
-  EXPECT(vec.empty() == false);
-  EXPECT(vec.size() == uint32_t(kMax));
-  EXPECT(vec.indexOf(T(kMax - 1)) == uint32_t(kMax - 1));
+  EXPECT_FALSE(vec.empty());
+  EXPECT_EQ(vec.size(), uint32_t(kMax));
+  EXPECT_EQ(vec.indexOf(T(0)), uint32_t(0));
+  EXPECT_EQ(vec.indexOf(T(kMax - 1)), uint32_t(kMax - 1));
+
+  EXPECT_EQ(vec.begin()[0], 0);
+  EXPECT_EQ(vec.end()[-1], kMax - 1);
+
+  EXPECT_EQ(vec.rbegin()[0], kMax - 1);
+  EXPECT_EQ(vec.rend()[-1], 0);
+
+  int64_t fsum = 0;
+  int64_t rsum = 0;
+
+  for (const T& item : vec) { fsum += item; }
+  for (auto it = vec.rbegin(); it != vec.rend(); ++it) { rsum += *it; }
+
+  EXPECT_EQ(fsum, rsum);
 
   vec.release(allocator);
 }
@@ -322,31 +316,31 @@ static void test_zone_bitvector(ZoneAllocator* allocator) {
   uint32_t kMaxCount = 100;
 
   ZoneBitVector vec;
-  EXPECT(vec.empty());
-  EXPECT(vec.size() == 0);
+  EXPECT_TRUE(vec.empty());
+  EXPECT_EQ(vec.size(), 0u);
 
   INFO("ZoneBitVector::resize()");
   for (count = 1; count < kMaxCount; count++) {
     vec.clear();
-    EXPECT(vec.resize(allocator, count, false) == kErrorOk);
-    EXPECT(vec.size() == count);
+    EXPECT_EQ(vec.resize(allocator, count, false), kErrorOk);
+    EXPECT_EQ(vec.size(), count);
 
     for (i = 0; i < count; i++)
-      EXPECT(vec.bitAt(i) == false);
+      EXPECT_FALSE(vec.bitAt(i));
 
     vec.clear();
-    EXPECT(vec.resize(allocator, count, true) == kErrorOk);
-    EXPECT(vec.size() == count);
+    EXPECT_EQ(vec.resize(allocator, count, true), kErrorOk);
+    EXPECT_EQ(vec.size(), count);
 
     for (i = 0; i < count; i++)
-      EXPECT(vec.bitAt(i) == true);
+      EXPECT_TRUE(vec.bitAt(i));
   }
 
   INFO("ZoneBitVector::fillBits() / clearBits()");
   for (count = 1; count < kMaxCount; count += 2) {
     vec.clear();
-    EXPECT(vec.resize(allocator, count) == kErrorOk);
-    EXPECT(vec.size() == count);
+    EXPECT_EQ(vec.resize(allocator, count), kErrorOk);
+    EXPECT_EQ(vec.size(), count);
 
     for (i = 0; i < (count + 1) / 2; i++) {
       bool value = bool(i & 1);
@@ -357,7 +351,7 @@ static void test_zone_bitvector(ZoneAllocator* allocator) {
     }
 
     for (i = 0; i < count; i++) {
-      EXPECT(vec.bitAt(i) == bool(i & 1));
+      EXPECT_EQ(vec.bitAt(i), bool(i & 1));
     }
   }
 }

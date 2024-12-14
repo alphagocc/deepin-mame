@@ -17,14 +17,14 @@ public:
 	virtual void WriteData( uint8_t *data, int dataLength ) override;
 
 protected:
-	void device_start() override;
+	void device_start() override ATTR_COLD;
 
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 private:
 	required_device<harddisk_image_device> m_image0;
 	required_device<harddisk_image_device> m_image1;
-	hard_disk_info m_param[2];
+	hard_disk_file::info m_param[2];
 };
 
 DECLARE_DEVICE_TYPE(OMTI5100, omti5100_device)

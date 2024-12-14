@@ -7,7 +7,6 @@
 */
 
 #include "emu.h"
-#include "debugger.h"
 #include "ssem.h"
 #include "ssemdasm.h"
 
@@ -192,17 +191,6 @@ uint32_t ssem_device::execute_min_cycles() const noexcept
 uint32_t ssem_device::execute_max_cycles() const noexcept
 {
 	return 1;
-}
-
-
-//-------------------------------------------------
-//  execute_input_lines - return the number of
-//  input/interrupt lines
-//-------------------------------------------------
-
-uint32_t ssem_device::execute_input_lines() const noexcept
-{
-	return 0;
 }
 
 

@@ -24,7 +24,7 @@
     0000 1110  ---k lscn    LED (1 = on: k = kana, l = caps lock, s = scroll lock, c = compose, n = num lock)
     0000 1111               layout request (keyboard responds with layout response)
 
-    message from keyboad to host:
+    message from keyboard to host:
     0xxx xxxx               key make
     1xxx xxxx               key break
     0111 1111               all keys up
@@ -971,7 +971,7 @@ hle_device_base::~hle_device_base()
     handle serial input line changes
 --------------------------------------------------*/
 
-WRITE_LINE_MEMBER( hle_device_base::input_txd )
+void hle_device_base::input_txd(int state)
 {
 	device_buffered_serial_interface::rx_w(state);
 }
@@ -998,7 +998,7 @@ void hle_device_base::device_add_mconfig(machine_config &config)
 void hle_device_base::device_start()
 {
 	m_leds.resolve();
-	m_click_timer = timer_alloc(CLICK_TIMER_ID);
+	m_click_timer = timer_alloc(FUNC(hle_device_base::click_off), this);
 
 	save_item(NAME(m_make_count));
 	save_item(NAME(m_rx_state));
@@ -1054,22 +1054,13 @@ void hle_device_base::device_reset()
 
 
 /*--------------------------------------------------
-    hle_device_base::device_timer
-    handle timed events
+    click_off - turn the clicker off
 --------------------------------------------------*/
 
-void hle_device_base::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(hle_device_base::click_off)
 {
-	switch (id)
-	{
-	case CLICK_TIMER_ID:
-		m_beeper_state &= ~uint8_t(BEEPER_CLICK);
-		m_beeper->set_state(m_beeper_state ? 1 : 0);
-		break;
-
-	default:
-		break;
-	}
+	m_beeper_state &= ~uint8_t(BEEPER_CLICK);
+	m_beeper->set_state(m_beeper_state ? 1 : 0);
 }
 
 

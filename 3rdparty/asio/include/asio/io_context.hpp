@@ -2,7 +2,7 @@
 // io_context.hpp
 // ~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -20,14 +20,13 @@
 #include <stdexcept>
 #include <typeinfo>
 #include "asio/async_result.hpp"
-#include "asio/detail/noncopyable.hpp"
+#include "asio/detail/chrono.hpp"
+#include "asio/detail/concurrency_hint.hpp"
+#include "asio/detail/cstdint.hpp"
 #include "asio/detail/wrapped_handler.hpp"
 #include "asio/error_code.hpp"
+#include "asio/execution.hpp"
 #include "asio/execution_context.hpp"
-
-#if defined(ASIO_HAS_CHRONO)
-# include "asio/detail/chrono.hpp"
-#endif // defined(ASIO_HAS_CHRONO)
 
 #if defined(ASIO_WINDOWS) || defined(__CYGWIN__)
 # include "asio/detail/winsock_init.hpp"
@@ -36,17 +35,31 @@
 # include "asio/detail/signal_init.hpp"
 #endif
 
+#if defined(ASIO_HAS_IOCP)
+# include "asio/detail/win_iocp_io_context.hpp"
+#else
+# include "asio/detail/scheduler.hpp"
+#endif
+
 #include "asio/detail/push_options.hpp"
 
 namespace asio {
 
 namespace detail {
 #if defined(ASIO_HAS_IOCP)
-  typedef class win_iocp_io_context io_context_impl;
+  typedef win_iocp_io_context io_context_impl;
   class win_iocp_overlapped_ptr;
 #else
-  typedef class scheduler io_context_impl;
+  typedef scheduler io_context_impl;
 #endif
+
+  struct io_context_bits
+  {
+    static constexpr uintptr_t blocking_never = 1;
+    static constexpr uintptr_t relationship_continuation = 2;
+    static constexpr uintptr_t outstanding_work_tracked = 4;
+    static constexpr uintptr_t runtime_bits = 3;
+  };
 } // namespace detail
 
 /// Provides core I/O functionality.
@@ -64,12 +77,12 @@ namespace detail {
  *
  * @par Thread Safety
  * @e Distinct @e objects: Safe.@n
- * @e Shared @e objects: Safe, with the specific exceptions of the restart() and
- * notify_fork() functions. Calling restart() while there are unfinished run(),
- * run_one(), poll() or poll_one() calls results in undefined behaviour. The
- * notify_fork() function should not be called while any io_context function,
- * or any function on an I/O object that is associated with the io_context, is
- * being called in another thread.
+ * @e Shared @e objects: Safe, with the specific exceptions of the restart()
+ * and notify_fork() functions. Calling restart() while there are unfinished
+ * run(), run_one(), run_for(), run_until(), poll() or poll_one() calls results
+ * in undefined behaviour. The notify_fork() function should not be called
+ * while any io_context function, or any function on an I/O object that is
+ * associated with the io_context, is being called in another thread.
  *
  * @par Concepts:
  * Dispatcher.
@@ -78,25 +91,26 @@ namespace detail {
  *
  * Synchronous operations on I/O objects implicitly run the io_context object
  * for an individual operation. The io_context functions run(), run_one(),
- * poll() or poll_one() must be called for the io_context to perform
- * asynchronous operations on behalf of a C++ program. Notification that an
- * asynchronous operation has completed is delivered by invocation of the
- * associated handler. Handlers are invoked only by a thread that is currently
- * calling any overload of run(), run_one(), poll() or poll_one() for the
- * io_context.
+ * run_for(), run_until(), poll() or poll_one() must be called for the
+ * io_context to perform asynchronous operations on behalf of a C++ program.
+ * Notification that an asynchronous operation has completed is delivered by
+ * invocation of the associated handler. Handlers are invoked only by a thread
+ * that is currently calling any overload of run(), run_one(), run_for(),
+ * run_until(), poll() or poll_one() for the io_context.
  *
  * @par Effect of exceptions thrown from handlers
  *
  * If an exception is thrown from a handler, the exception is allowed to
  * propagate through the throwing thread's invocation of run(), run_one(),
- * poll() or poll_one(). No other threads that are calling any of these
- * functions are affected. It is then the responsibility of the application to
- * catch the exception.
+ * run_for(), run_until(), poll() or poll_one(). No other threads that are
+ * calling any of these functions are affected. It is then the responsibility
+ * of the application to catch the exception.
  *
- * After the exception has been caught, the run(), run_one(), poll() or
- * poll_one() call may be restarted @em without the need for an intervening
- * call to restart(). This allows the thread to rejoin the io_context object's
- * thread pool without impacting any other threads in the pool.
+ * After the exception has been caught, the run(), run_one(), run_for(),
+ * run_until(), poll() or poll_one() call may be restarted @em without the need
+ * for an intervening call to restart(). This allows the thread to rejoin the
+ * io_context object's thread pool without impacting any other threads in the
+ * pool.
  *
  * For example:
  *
@@ -117,13 +131,42 @@ namespace detail {
  * }
  * @endcode
  *
+ * @par Submitting arbitrary tasks to the io_context
+ *
+ * To submit functions to the io_context, use the @ref asio::dispatch,
+ * @ref asio::post or @ref asio::defer free functions.
+ *
+ * For example:
+ *
+ * @code void my_task()
+ * {
+ *   ...
+ * }
+ *
+ * ...
+ *
+ * asio::io_context io_context;
+ *
+ * // Submit a function to the io_context.
+ * asio::post(io_context, my_task);
+ *
+ * // Submit a lambda object to the io_context.
+ * asio::post(io_context,
+ *     []()
+ *     {
+ *       ...
+ *     });
+ *
+ * // Run the io_context until it runs out of work.
+ * io_context.run(); @endcode
+ *
  * @par Stopping the io_context from running out of work
  *
  * Some applications may need to prevent an io_context object's run() call from
  * returning when there is no more work to do. For example, the io_context may
  * be being run in a background thread that is launched prior to the
  * application's asynchronous operations. The run() call may be kept running by
- * creating an object of type
+ * using the @ref make_work_guard function to create an object of type
  * asio::executor_work_guard<io_context::executor_type>:
  *
  * @code asio::io_context io_context;
@@ -154,9 +197,20 @@ private:
   friend class detail::win_iocp_overlapped_ptr;
 #endif
 
+#if !defined(ASIO_NO_DEPRECATED)
+  struct initiate_dispatch;
+  struct initiate_post;
+#endif // !defined(ASIO_NO_DEPRECATED)
+
 public:
-  class executor_type;
-  friend class executor_type;
+  template <typename Allocator, uintptr_t Bits>
+  class basic_executor_type;
+
+  template <typename Allocator, uintptr_t Bits>
+  friend class basic_executor_type;
+
+  /// Executor used to submit functions to an io_context.
+  typedef basic_executor_type<std::allocator<void>, 0> executor_type;
 
 #if !defined(ASIO_NO_DEPRECATED)
   class work;
@@ -165,9 +219,11 @@ public:
 
   class service;
 
-#if !defined(ASIO_NO_EXTENSIONS)
+#if !defined(ASIO_NO_EXTENSIONS) \
+  && !defined(ASIO_NO_TS_EXECUTORS)
   class strand;
 #endif // !defined(ASIO_NO_EXTENSIONS)
+       //   && !defined(ASIO_NO_TS_EXECUTORS)
 
   /// The type used to count the number of handlers executed by the context.
   typedef std::size_t count_type;
@@ -219,7 +275,7 @@ public:
   ASIO_DECL ~io_context();
 
   /// Obtains the executor associated with the io_context.
-  executor_type get_executor() ASIO_NOEXCEPT;
+  executor_type get_executor() noexcept;
 
   /// Run the io_context object's event processing loop.
   /**
@@ -238,9 +294,10 @@ public:
    *
    * @return The number of handlers that were executed.
    *
-   * @note The run() function must not be called from a thread that is currently
-   * calling one of run(), run_one(), poll() or poll_one() on the same
-   * io_context object.
+   * @note Calling the run() function from a thread that is currently calling
+   * one of run(), run_one(), run_for(), run_until(), poll() or poll_one() on
+   * the same io_context object may introduce the potential for deadlock. It is
+   * the caller's reponsibility to avoid this.
    *
    * The poll() function may also be used to dispatch ready handlers, but
    * without blocking.
@@ -268,9 +325,10 @@ public:
    *
    * @return The number of handlers that were executed.
    *
-   * @note The run() function must not be called from a thread that is currently
-   * calling one of run(), run_one(), poll() or poll_one() on the same
-   * io_context object.
+   * @note Calling the run() function from a thread that is currently calling
+   * one of run(), run_one(), run_for(), run_until(), poll() or poll_one() on
+   * the same io_context object may introduce the potential for deadlock. It is
+   * the caller's reponsibility to avoid this.
    *
    * The poll() function may also be used to dispatch ready handlers, but
    * without blocking.
@@ -278,7 +336,6 @@ public:
   ASIO_DECL count_type run(asio::error_code& ec);
 #endif // !defined(ASIO_NO_DEPRECATED)
 
-#if defined(ASIO_HAS_CHRONO) || defined(GENERATING_DOCUMENTATION)
   /// Run the io_context object's event processing loop for a specified
   /// duration.
   /**
@@ -305,7 +362,6 @@ public:
    */
   template <typename Clock, typename Duration>
   std::size_t run_until(const chrono::time_point<Clock, Duration>& abs_time);
-#endif // defined(ASIO_HAS_CHRONO) || defined(GENERATING_DOCUMENTATION)
 
   /// Run the io_context object's event processing loop to execute at most one
   /// handler.
@@ -318,11 +374,16 @@ public:
    * returns @c true). Subsequent calls to run(), run_one(), poll() or
    * poll_one() will return immediately unless there is a prior call to
    * restart().
+   *
+   * @note Calling the run_one() function from a thread that is currently
+   * calling one of run(), run_one(), run_for(), run_until(), poll() or
+   * poll_one() on the same io_context object may introduce the potential for
+   * deadlock. It is the caller's reponsibility to avoid this.
    */
   ASIO_DECL count_type run_one();
 
 #if !defined(ASIO_NO_DEPRECATED)
-  /// (Deprecated: Use non-error_code overlaod.) Run the io_context object's
+  /// (Deprecated: Use non-error_code overload.) Run the io_context object's
   /// event processing loop to execute at most one handler.
   /**
    * The run_one() function blocks until one handler has been dispatched, or
@@ -335,11 +396,15 @@ public:
    * restart().
    *
    * @return The number of handlers that were executed.
+   *
+   * @note Calling the run_one() function from a thread that is currently
+   * calling one of run(), run_one(), run_for(), run_until(), poll() or
+   * poll_one() on the same io_context object may introduce the potential for
+   * deadlock. It is the caller's reponsibility to avoid this.
    */
   ASIO_DECL count_type run_one(asio::error_code& ec);
 #endif // !defined(ASIO_NO_DEPRECATED)
 
-#if defined(ASIO_HAS_CHRONO) || defined(GENERATING_DOCUMENTATION)
   /// Run the io_context object's event processing loop for a specified duration
   /// to execute at most one handler.
   /**
@@ -368,7 +433,6 @@ public:
   template <typename Clock, typename Duration>
   std::size_t run_one_until(
       const chrono::time_point<Clock, Duration>& abs_time);
-#endif // defined(ASIO_HAS_CHRONO) || defined(GENERATING_DOCUMENTATION)
 
   /// Run the io_context object's event processing loop to execute ready
   /// handlers.
@@ -483,15 +547,17 @@ public:
    *
    * @note This function throws an exception only if:
    *
-   * @li the handler's @c asio_handler_allocate function; or
+   * @li the handler's associated allocator; or
    *
    * @li the handler's copy constructor
    *
    * throws an exception.
    */
-  template <typename CompletionHandler>
-  ASIO_INITFN_RESULT_TYPE(CompletionHandler, void ())
-  dispatch(ASIO_MOVE_ARG(CompletionHandler) handler);
+  template <typename LegacyCompletionHandler>
+  auto dispatch(LegacyCompletionHandler&& handler)
+    -> decltype(
+      async_initiate<LegacyCompletionHandler, void ()>(
+        declval<initiate_dispatch>(), handler, this));
 
   /// (Deprecated: Use asio::post().) Request the io_context to invoke
   /// the given handler and return immediately.
@@ -510,15 +576,17 @@ public:
    *
    * @note This function throws an exception only if:
    *
-   * @li the handler's @c asio_handler_allocate function; or
+   * @li the handler's associated allocator; or
    *
    * @li the handler's copy constructor
    *
    * throws an exception.
    */
-  template <typename CompletionHandler>
-  ASIO_INITFN_RESULT_TYPE(CompletionHandler, void ())
-  post(ASIO_MOVE_ARG(CompletionHandler) handler);
+  template <typename LegacyCompletionHandler>
+  auto post(LegacyCompletionHandler&& handler)
+    -> decltype(
+      async_initiate<LegacyCompletionHandler, void ()>(
+        declval<initiate_post>(), handler, this));
 
   /// (Deprecated: Use asio::bind_executor().) Create a new handler that
   /// automatically dispatches the wrapped handler on the io_context.
@@ -552,6 +620,9 @@ public:
 #endif // !defined(ASIO_NO_DEPRECATED)
 
 private:
+  io_context(const io_context&) = delete;
+  io_context& operator=(const io_context&) = delete;
+
   // Helper function to add the implementation.
   ASIO_DECL impl_type& add_impl(impl_type* impl);
 
@@ -571,12 +642,351 @@ private:
   impl_type& impl_;
 };
 
-/// Executor used to submit functions to an io_context.
-class io_context::executor_type
+/// Executor implementation type used to submit functions to an io_context.
+template <typename Allocator, uintptr_t Bits>
+class io_context::basic_executor_type :
+  detail::io_context_bits, Allocator
 {
 public:
+  /// Copy constructor.
+  basic_executor_type(const basic_executor_type& other) noexcept
+    : Allocator(static_cast<const Allocator&>(other)),
+      target_(other.target_)
+  {
+    if (Bits & outstanding_work_tracked)
+      if (context_ptr())
+        context_ptr()->impl_.work_started();
+  }
+
+  /// Move constructor.
+  basic_executor_type(basic_executor_type&& other) noexcept
+    : Allocator(static_cast<Allocator&&>(other)),
+      target_(other.target_)
+  {
+    if (Bits & outstanding_work_tracked)
+      other.target_ = 0;
+  }
+
+  /// Destructor.
+  ~basic_executor_type() noexcept
+  {
+    if (Bits & outstanding_work_tracked)
+      if (context_ptr())
+        context_ptr()->impl_.work_finished();
+  }
+
+  /// Assignment operator.
+  basic_executor_type& operator=(const basic_executor_type& other) noexcept;
+
+  /// Move assignment operator.
+  basic_executor_type& operator=(basic_executor_type&& other) noexcept;
+
+#if !defined(GENERATING_DOCUMENTATION)
+private:
+  friend struct asio_require_fn::impl;
+  friend struct asio_prefer_fn::impl;
+#endif // !defined(GENERATING_DOCUMENTATION)
+
+  /// Obtain an executor with the @c blocking.possibly property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::blocking.possibly); @endcode
+   */
+  constexpr basic_executor_type require(execution::blocking_t::possibly_t) const
+  {
+    return basic_executor_type(context_ptr(),
+        *this, bits() & ~blocking_never);
+  }
+
+  /// Obtain an executor with the @c blocking.never property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::blocking.never); @endcode
+   */
+  constexpr basic_executor_type require(execution::blocking_t::never_t) const
+  {
+    return basic_executor_type(context_ptr(),
+        *this, bits() | blocking_never);
+  }
+
+  /// Obtain an executor with the @c relationship.fork property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::relationship.fork); @endcode
+   */
+  constexpr basic_executor_type require(execution::relationship_t::fork_t) const
+  {
+    return basic_executor_type(context_ptr(),
+        *this, bits() & ~relationship_continuation);
+  }
+
+  /// Obtain an executor with the @c relationship.continuation property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::relationship.continuation); @endcode
+   */
+  constexpr basic_executor_type require(
+      execution::relationship_t::continuation_t) const
+  {
+    return basic_executor_type(context_ptr(),
+        *this, bits() | relationship_continuation);
+  }
+
+  /// Obtain an executor with the @c outstanding_work.tracked property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::outstanding_work.tracked); @endcode
+   */
+  constexpr basic_executor_type<Allocator,
+      ASIO_UNSPECIFIED(Bits | outstanding_work_tracked)>
+  require(execution::outstanding_work_t::tracked_t) const
+  {
+    return basic_executor_type<Allocator, Bits | outstanding_work_tracked>(
+        context_ptr(), *this, bits());
+  }
+
+  /// Obtain an executor with the @c outstanding_work.untracked property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::outstanding_work.untracked); @endcode
+   */
+  constexpr basic_executor_type<Allocator,
+      ASIO_UNSPECIFIED(Bits & ~outstanding_work_tracked)>
+  require(execution::outstanding_work_t::untracked_t) const
+  {
+    return basic_executor_type<Allocator, Bits & ~outstanding_work_tracked>(
+        context_ptr(), *this, bits());
+  }
+
+  /// Obtain an executor with the specified @c allocator property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::allocator(my_allocator)); @endcode
+   */
+  template <typename OtherAllocator>
+  constexpr basic_executor_type<OtherAllocator, Bits>
+  require(execution::allocator_t<OtherAllocator> a) const
+  {
+    return basic_executor_type<OtherAllocator, Bits>(
+        context_ptr(), a.value(), bits());
+  }
+
+  /// Obtain an executor with the default @c allocator property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::require customisation point.
+   *
+   * For example:
+   * @code auto ex1 = my_io_context.get_executor();
+   * auto ex2 = asio::require(ex1,
+   *     asio::execution::allocator); @endcode
+   */
+  constexpr basic_executor_type<std::allocator<void>, Bits>
+  require(execution::allocator_t<void>) const
+  {
+    return basic_executor_type<std::allocator<void>, Bits>(
+        context_ptr(), std::allocator<void>(), bits());
+  }
+
+#if !defined(GENERATING_DOCUMENTATION)
+private:
+  friend struct asio_query_fn::impl;
+  friend struct asio::execution::detail::mapping_t<0>;
+  friend struct asio::execution::detail::outstanding_work_t<0>;
+#endif // !defined(GENERATING_DOCUMENTATION)
+
+  /// Query the current value of the @c mapping property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * if (asio::query(ex, asio::execution::mapping)
+   *       == asio::execution::mapping.thread)
+   *   ... @endcode
+   */
+  static constexpr execution::mapping_t query(execution::mapping_t) noexcept
+  {
+    return execution::mapping.thread;
+  }
+
+  /// Query the current value of the @c context property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * asio::io_context& ctx = asio::query(
+   *     ex, asio::execution::context); @endcode
+   */
+  io_context& query(execution::context_t) const noexcept
+  {
+    return *context_ptr();
+  }
+
+  /// Query the current value of the @c blocking property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * if (asio::query(ex, asio::execution::blocking)
+   *       == asio::execution::blocking.always)
+   *   ... @endcode
+   */
+  constexpr execution::blocking_t query(execution::blocking_t) const noexcept
+  {
+    return (bits() & blocking_never)
+      ? execution::blocking_t(execution::blocking.never)
+      : execution::blocking_t(execution::blocking.possibly);
+  }
+
+  /// Query the current value of the @c relationship property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * if (asio::query(ex, asio::execution::relationship)
+   *       == asio::execution::relationship.continuation)
+   *   ... @endcode
+   */
+  constexpr execution::relationship_t query(
+      execution::relationship_t) const noexcept
+  {
+    return (bits() & relationship_continuation)
+      ? execution::relationship_t(execution::relationship.continuation)
+      : execution::relationship_t(execution::relationship.fork);
+  }
+
+  /// Query the current value of the @c outstanding_work property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * if (asio::query(ex, asio::execution::outstanding_work)
+   *       == asio::execution::outstanding_work.tracked)
+   *   ... @endcode
+   */
+  static constexpr execution::outstanding_work_t query(
+      execution::outstanding_work_t) noexcept
+  {
+    return (Bits & outstanding_work_tracked)
+      ? execution::outstanding_work_t(execution::outstanding_work.tracked)
+      : execution::outstanding_work_t(execution::outstanding_work.untracked);
+  }
+
+  /// Query the current value of the @c allocator property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * auto alloc = asio::query(ex,
+   *     asio::execution::allocator); @endcode
+   */
+  template <typename OtherAllocator>
+  constexpr Allocator query(
+      execution::allocator_t<OtherAllocator>) const noexcept
+  {
+    return static_cast<const Allocator&>(*this);
+  }
+
+  /// Query the current value of the @c allocator property.
+  /**
+   * Do not call this function directly. It is intended for use with the
+   * asio::query customisation point.
+   *
+   * For example:
+   * @code auto ex = my_io_context.get_executor();
+   * auto alloc = asio::query(ex,
+   *     asio::execution::allocator); @endcode
+   */
+  constexpr Allocator query(execution::allocator_t<void>) const noexcept
+  {
+    return static_cast<const Allocator&>(*this);
+  }
+
+public:
+  /// Determine whether the io_context is running in the current thread.
+  /**
+   * @return @c true if the current thread is running the io_context. Otherwise
+   * returns @c false.
+   */
+  bool running_in_this_thread() const noexcept;
+
+  /// Compare two executors for equality.
+  /**
+   * Two executors are equal if they refer to the same underlying io_context.
+   */
+  friend bool operator==(const basic_executor_type& a,
+      const basic_executor_type& b) noexcept
+  {
+    return a.target_ == b.target_
+      && static_cast<const Allocator&>(a) == static_cast<const Allocator&>(b);
+  }
+
+  /// Compare two executors for inequality.
+  /**
+   * Two executors are equal if they refer to the same underlying io_context.
+   */
+  friend bool operator!=(const basic_executor_type& a,
+      const basic_executor_type& b) noexcept
+  {
+    return a.target_ != b.target_
+      || static_cast<const Allocator&>(a) != static_cast<const Allocator&>(b);
+  }
+
+  /// Execution function.
+  template <typename Function>
+  void execute(Function&& f) const;
+
+#if !defined(ASIO_NO_TS_EXECUTORS)
+public:
   /// Obtain the underlying execution context.
-  io_context& context() const ASIO_NOEXCEPT;
+  io_context& context() const noexcept;
 
   /// Inform the io_context that it has some outstanding work to do.
   /**
@@ -584,7 +994,7 @@ public:
    * This ensures that the io_context's run() and run_one() functions do not
    * exit while the work is underway.
    */
-  void on_work_started() const ASIO_NOEXCEPT;
+  void on_work_started() const noexcept;
 
   /// Inform the io_context that some work is no longer outstanding.
   /**
@@ -592,7 +1002,7 @@ public:
    * finished. Once the count of unfinished work reaches zero, the io_context
    * is stopped and the run() and run_one() functions may exit.
    */
-  void on_work_finished() const ASIO_NOEXCEPT;
+  void on_work_finished() const noexcept;
 
   /// Request the io_context to invoke the given function object.
   /**
@@ -608,8 +1018,8 @@ public:
    * @param a An allocator that may be used by the executor to allocate the
    * internal storage needed for function invocation.
    */
-  template <typename Function, typename Allocator>
-  void dispatch(ASIO_MOVE_ARG(Function) f, const Allocator& a) const;
+  template <typename Function, typename OtherAllocator>
+  void dispatch(Function&& f, const OtherAllocator& a) const;
 
   /// Request the io_context to invoke the given function object.
   /**
@@ -624,8 +1034,8 @@ public:
    * @param a An allocator that may be used by the executor to allocate the
    * internal storage needed for function invocation.
    */
-  template <typename Function, typename Allocator>
-  void post(ASIO_MOVE_ARG(Function) f, const Allocator& a) const;
+  template <typename Function, typename OtherAllocator>
+  void post(Function&& f, const OtherAllocator& a) const;
 
   /// Request the io_context to invoke the given function object.
   /**
@@ -644,44 +1054,46 @@ public:
    * @param a An allocator that may be used by the executor to allocate the
    * internal storage needed for function invocation.
    */
-  template <typename Function, typename Allocator>
-  void defer(ASIO_MOVE_ARG(Function) f, const Allocator& a) const;
-
-  /// Determine whether the io_context is running in the current thread.
-  /**
-   * @return @c true if the current thread is running the io_context. Otherwise
-   * returns @c false.
-   */
-  bool running_in_this_thread() const ASIO_NOEXCEPT;
-
-  /// Compare two executors for equality.
-  /**
-   * Two executors are equal if they refer to the same underlying io_context.
-   */
-  friend bool operator==(const executor_type& a,
-      const executor_type& b) ASIO_NOEXCEPT
-  {
-    return &a.io_context_ == &b.io_context_;
-  }
-
-  /// Compare two executors for inequality.
-  /**
-   * Two executors are equal if they refer to the same underlying io_context.
-   */
-  friend bool operator!=(const executor_type& a,
-      const executor_type& b) ASIO_NOEXCEPT
-  {
-    return &a.io_context_ != &b.io_context_;
-  }
+  template <typename Function, typename OtherAllocator>
+  void defer(Function&& f, const OtherAllocator& a) const;
+#endif // !defined(ASIO_NO_TS_EXECUTORS)
 
 private:
   friend class io_context;
+  template <typename, uintptr_t> friend class basic_executor_type;
 
-  // Constructor.
-  explicit executor_type(io_context& i) : io_context_(i) {}
+  // Constructor used by io_context::get_executor().
+  explicit basic_executor_type(io_context& i) noexcept
+    : Allocator(),
+      target_(reinterpret_cast<uintptr_t>(&i))
+  {
+    if (Bits & outstanding_work_tracked)
+      context_ptr()->impl_.work_started();
+  }
 
-  // The underlying io_context.
-  io_context& io_context_;
+  // Constructor used by require().
+  basic_executor_type(io_context* i,
+      const Allocator& a, uintptr_t bits) noexcept
+    : Allocator(a),
+      target_(reinterpret_cast<uintptr_t>(i) | bits)
+  {
+    if (Bits & outstanding_work_tracked)
+      if (context_ptr())
+        context_ptr()->impl_.work_started();
+  }
+
+  io_context* context_ptr() const noexcept
+  {
+    return reinterpret_cast<io_context*>(target_ & ~runtime_bits);
+  }
+
+  uintptr_t bits() const noexcept
+  {
+    return target_ & runtime_bits;
+  }
+
+  // The underlying io_context and runtime bits.
+  uintptr_t target_;
 };
 
 #if !defined(ASIO_NO_DEPRECATED)
@@ -726,10 +1138,6 @@ public:
   /// Get the io_context associated with the work.
   asio::io_context& get_io_context();
 
-  /// (Deprecated: Use get_io_context().) Get the io_context associated with the
-  /// work.
-  asio::io_context& get_io_service();
-
 private:
   // Prevent assignment.
   void operator=(const work& other);
@@ -746,11 +1154,6 @@ class io_context::service
 public:
   /// Get the io_context object that owns the service.
   asio::io_context& get_io_context();
-
-#if !defined(ASIO_NO_DEPRECATED)
-  /// Get the io_context object that owns the service.
-  asio::io_context& get_io_service();
-#endif // !defined(ASIO_NO_DEPRECATED)
 
 private:
   /// Destroy all user-defined handler objects owned by the service.
@@ -814,6 +1217,274 @@ template <typename Type>
 asio::detail::service_id<Type> service_base<Type>::id;
 
 } // namespace detail
+
+#if !defined(GENERATING_DOCUMENTATION)
+
+namespace traits {
+
+#if !defined(ASIO_HAS_DEDUCED_EQUALITY_COMPARABLE_TRAIT)
+
+template <typename Allocator, uintptr_t Bits>
+struct equality_comparable<
+    asio::io_context::basic_executor_type<Allocator, Bits>
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+};
+
+#endif // !defined(ASIO_HAS_DEDUCED_EQUALITY_COMPARABLE_TRAIT)
+
+#if !defined(ASIO_HAS_DEDUCED_EXECUTE_MEMBER_TRAIT)
+
+template <typename Allocator, uintptr_t Bits, typename Function>
+struct execute_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    Function
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef void result_type;
+};
+
+#endif // !defined(ASIO_HAS_DEDUCED_EXECUTE_MEMBER_TRAIT)
+
+#if !defined(ASIO_HAS_DEDUCED_REQUIRE_MEMBER_TRAIT)
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::blocking_t::possibly_t
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      Allocator, Bits> result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::blocking_t::never_t
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      Allocator, Bits> result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::relationship_t::fork_t
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      Allocator, Bits> result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::relationship_t::continuation_t
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      Allocator, Bits> result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::outstanding_work_t::tracked_t
+  > : asio::detail::io_context_bits
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      Allocator, Bits | outstanding_work_tracked> result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::outstanding_work_t::untracked_t
+  > : asio::detail::io_context_bits
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      Allocator, Bits & ~outstanding_work_tracked> result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::allocator_t<void>
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      std::allocator<void>, Bits> result_type;
+};
+
+template <uintptr_t Bits,
+    typename Allocator, typename OtherAllocator>
+struct require_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::allocator_t<OtherAllocator>
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = false;
+  typedef asio::io_context::basic_executor_type<
+      OtherAllocator, Bits> result_type;
+};
+
+#endif // !defined(ASIO_HAS_DEDUCED_REQUIRE_MEMBER_TRAIT)
+
+#if !defined(ASIO_HAS_DEDUCED_QUERY_STATIC_CONSTEXPR_MEMBER_TRAIT)
+
+template <typename Allocator, uintptr_t Bits, typename Property>
+struct query_static_constexpr_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    Property,
+    typename asio::enable_if<
+      asio::is_convertible<
+        Property,
+        asio::execution::outstanding_work_t
+      >::value
+    >::type
+  > : asio::detail::io_context_bits
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef asio::execution::outstanding_work_t result_type;
+
+  static constexpr result_type value() noexcept
+  {
+    return (Bits & outstanding_work_tracked)
+      ? execution::outstanding_work_t(execution::outstanding_work.tracked)
+      : execution::outstanding_work_t(execution::outstanding_work.untracked);
+  }
+};
+
+template <typename Allocator, uintptr_t Bits, typename Property>
+struct query_static_constexpr_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    Property,
+    typename asio::enable_if<
+      asio::is_convertible<
+        Property,
+        asio::execution::mapping_t
+      >::value
+    >::type
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef asio::execution::mapping_t::thread_t result_type;
+
+  static constexpr result_type value() noexcept
+  {
+    return result_type();
+  }
+};
+
+#endif // !defined(ASIO_HAS_DEDUCED_QUERY_STATIC_CONSTEXPR_MEMBER_TRAIT)
+
+#if !defined(ASIO_HAS_DEDUCED_QUERY_MEMBER_TRAIT)
+
+template <typename Allocator, uintptr_t Bits, typename Property>
+struct query_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    Property,
+    typename asio::enable_if<
+      asio::is_convertible<
+        Property,
+        asio::execution::blocking_t
+      >::value
+    >::type
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef asio::execution::blocking_t result_type;
+};
+
+template <typename Allocator, uintptr_t Bits, typename Property>
+struct query_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    Property,
+    typename asio::enable_if<
+      asio::is_convertible<
+        Property,
+        asio::execution::relationship_t
+      >::value
+    >::type
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef asio::execution::relationship_t result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct query_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::context_t
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef asio::io_context& result_type;
+};
+
+template <typename Allocator, uintptr_t Bits>
+struct query_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::allocator_t<void>
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef Allocator result_type;
+};
+
+template <typename Allocator, uintptr_t Bits, typename OtherAllocator>
+struct query_member<
+    asio::io_context::basic_executor_type<Allocator, Bits>,
+    asio::execution::allocator_t<OtherAllocator>
+  >
+{
+  static constexpr bool is_valid = true;
+  static constexpr bool is_noexcept = true;
+  typedef Allocator result_type;
+};
+
+#endif // !defined(ASIO_HAS_DEDUCED_QUERY_MEMBER_TRAIT)
+
+} // namespace traits
+
+namespace execution {
+
+template <>
+struct is_executor<io_context> : false_type
+{
+};
+
+} // namespace execution
+
+#endif // !defined(GENERATING_DOCUMENTATION)
+
 } // namespace asio
 
 #include "asio/detail/pop_options.hpp"

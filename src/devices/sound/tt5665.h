@@ -63,8 +63,8 @@ public:
 protected:
 	// device-level overrides
 	virtual void device_validity_check(validity_checker &valid) const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_post_load() override;
 	virtual void device_clock_changed() override;
 
@@ -72,7 +72,7 @@ protected:
 	virtual void sound_stream_update(sound_stream &stream, std::vector<read_stream_view> const &inputs, std::vector<write_stream_view> &outputs) override;
 
 	// device_rom_interface overrides
-	virtual void rom_bank_updated() override;
+	virtual void rom_bank_pre_change() override;
 
 private:
 	// a single voice
@@ -98,7 +98,7 @@ private:
 	static constexpr int TT5665_VOICES = 4;
 
 	tt5665_voice    m_voice[TT5665_VOICES * 2]; // separated voice for left and right output
-	s32             m_command[2];               // seperated command for left and right output
+	s32             m_command[2];               // separated command for left and right output
 	sound_stream*   m_stream;
 	s32             m_daol_output;
 	int             m_daol_timing;

@@ -18,11 +18,11 @@ public:
 	auto irq_cb() { return m_irq_cb.bind(); }
 
 protected:
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_clock_changed() override;
 
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	TIMER_CALLBACK_MEMBER(timer_update);
 
 private:
 	devcb_write_line m_irq_cb;

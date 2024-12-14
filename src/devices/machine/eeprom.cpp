@@ -2,14 +2,16 @@
 // copyright-holders:Aaron Giles
 /***************************************************************************
 
-    eeprom.c
+    eeprom.cpp
 
     Base class for EEPROM devices.
 
 ***************************************************************************/
 
 #include "emu.h"
-#include "machine/eeprom.h"
+#include "eeprom.h"
+
+#include "multibyte.h"
 
 //#define VERBOSE 1
 #include "logmacro.h"
@@ -23,18 +25,18 @@
 //  eeprom_base_device - constructor
 //-------------------------------------------------
 
-eeprom_base_device::eeprom_base_device(const machine_config &mconfig, device_type devtype, const char *tag, device_t *owner)
-	: device_t(mconfig, devtype, tag, owner, 0),
-		device_nvram_interface(mconfig, *this),
-		m_region(*this, DEVICE_SELF),
-		m_cells(0),
-		m_address_bits(0),
-		m_data_bits(0),
-		m_default_data(nullptr),
-		m_default_data_size(0),
-		m_default_value(0),
-		m_default_value_set(false),
-		m_completion_time(attotime::zero)
+eeprom_base_device::eeprom_base_device(const machine_config &mconfig, device_type devtype, const char *tag, device_t *owner) :
+	device_t(mconfig, devtype, tag, owner, 0),
+	device_nvram_interface(mconfig, *this),
+	m_region(*this, DEVICE_SELF),
+	m_cells(0),
+	m_address_bits(0),
+	m_data_bits(0),
+	m_default_data(nullptr),
+	m_default_data_size(0),
+	m_default_value(0),
+	m_default_value_set(false),
+	m_completion_time(attotime::zero)
 {
 	// a 2ms write time is too long for rfjetsa
 	m_operation_time[WRITE_TIME]        = attotime::from_usec(1750);
@@ -249,12 +251,13 @@ void eeprom_base_device::nvram_default()
 //  .nv file
 //-------------------------------------------------
 
-void eeprom_base_device::nvram_read(emu_file &file)
+bool eeprom_base_device::nvram_read(util::read_stream &file)
 {
-	uint32_t eeprom_length = 1 << m_address_bits;
-	uint32_t eeprom_bytes = eeprom_length * m_data_bits / 8;
+	uint32_t const eeprom_length = 1 << m_address_bits;
+	uint32_t const eeprom_bytes = eeprom_length * m_data_bits / 8;
 
-	file.read(&m_data[0], eeprom_bytes);
+	auto const [err, actual_bytes] = util::read(file, &m_data[0], eeprom_bytes);
+	return !err && (actual_bytes == eeprom_bytes);
 }
 
 
@@ -263,12 +266,13 @@ void eeprom_base_device::nvram_read(emu_file &file)
 //  .nv file
 //-------------------------------------------------
 
-void eeprom_base_device::nvram_write(emu_file &file)
+bool eeprom_base_device::nvram_write(util::write_stream &file)
 {
-	uint32_t eeprom_length = 1 << m_address_bits;
-	uint32_t eeprom_bytes = eeprom_length * m_data_bits / 8;
+	uint32_t const eeprom_length = 1 << m_address_bits;
+	uint32_t const eeprom_bytes = eeprom_length * m_data_bits / 8;
 
-	file.write(&m_data[0], eeprom_bytes);
+	auto const [err, actual_bytes] = util::write(file, &m_data[0], eeprom_bytes);
+	return !err;
 }
 
 
@@ -279,7 +283,7 @@ void eeprom_base_device::nvram_write(emu_file &file)
 uint32_t eeprom_base_device::internal_read(offs_t address)
 {
 	if (m_data_bits == 16)
-		return m_data[address * 2] | (m_data[address * 2 + 1] << 8);
+		return get_u16le(&m_data[address * 2]);
 	else
 		return m_data[address];
 }
@@ -293,9 +297,7 @@ uint32_t eeprom_base_device::internal_read(offs_t address)
 void eeprom_base_device::internal_write(offs_t address, uint32_t data)
 {
 	if (m_data_bits == 16)
-	{
-		m_data[address * 2] = data;
-		m_data[address * 2 + 1] = data >> 8;
-	} else
+		put_u16le(&m_data[address * 2], data);
+	else
 		m_data[address] = data;
 }

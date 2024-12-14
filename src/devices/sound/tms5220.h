@@ -45,8 +45,8 @@ public:
 
 	// all lines with suffix q are active low!
 
-	WRITE_LINE_MEMBER( rsq_w );
-	WRITE_LINE_MEMBER( wsq_w );
+	void rsq_w(int state);
+	void wsq_w(int state);
 
 	void combined_rsq_wsq_w(u8 data);
 	/* this combined_rsq_wsq_w hack is necessary for specific systems such as
@@ -61,21 +61,21 @@ public:
 	void data_w(uint8_t data);
 	uint8_t status_r();
 
-	READ_LINE_MEMBER( readyq_r );
-	READ_LINE_MEMBER( intq_r );
+	int readyq_r();
+	int intq_r();
 
 protected:
 	tms5220_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, int variant);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_clock_changed() override;
-
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
 
 	// sound stream update overrides
 	virtual void sound_stream_update(sound_stream &stream, std::vector<read_stream_view> const &inputs, std::vector<write_stream_view> &outputs) override;
+
+	TIMER_CALLBACK_MEMBER(set_io_ready);
 
 private:
 	static constexpr unsigned FIFO_SIZE = 16;
@@ -89,7 +89,7 @@ private:
 	void register_for_save_states();
 	void data_write(int data);
 	void update_fifo_status_and_ints();
-	int extract_bits(int count);
+	int read_bits(int count);
 	uint8_t status_read(bool clear_int);
 	bool ready_read();
 	bool int_read();

@@ -42,7 +42,7 @@ public:
 	u32 size() const { return m_size; }
 	u32 mask() const { return m_size - 1; }
 	u8 *pointer() { return &m_pointer[0]; }
-	char const *default_size_string() const { return m_default_size; };
+	char const *default_size_string() const { return m_default_size; }
 	u32 default_size() const;
 	extra_option_vector const &extra_options() const;
 
@@ -61,7 +61,7 @@ public:
 	ram_device &set_default_value(u8 default_value) { m_default_value = default_value; return *this; }
 
 protected:
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 	virtual void device_validity_check(validity_checker &valid) const override;
 
 private:

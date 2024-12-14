@@ -56,7 +56,6 @@
 #define OPTION_REWIND_CAPACITY      "rewind_capacity"
 #define OPTION_PLAYBACK             "playback"
 #define OPTION_RECORD               "record"
-#define OPTION_RECORD_TIMECODE      "record_timecode"
 #define OPTION_EXIT_AFTER_PLAYBACK  "exit_after_playback"
 #define OPTION_MNGWRITE             "mngwrite"
 #define OPTION_AVIWRITE             "aviwrite"
@@ -137,6 +136,7 @@
 #define OPTION_JOYSTICK_MAP         "joystick_map"
 #define OPTION_JOYSTICK_DEADZONE    "joystick_deadzone"
 #define OPTION_JOYSTICK_SATURATION  "joystick_saturation"
+#define OPTION_JOYSTICK_THRESHOLD   "joystick_threshold"
 #define OPTION_NATURAL_KEYBOARD     "natural"
 #define OPTION_JOYSTICK_CONTRADICTORY   "joystick_contradictory"
 #define OPTION_COIN_IMPULSE         "coin_impulse"
@@ -342,7 +342,6 @@ public:
 	int rewind_capacity() const { return int_value(OPTION_REWIND_CAPACITY); }
 	const char *playback() const { return value(OPTION_PLAYBACK); }
 	const char *record() const { return value(OPTION_RECORD); }
-	bool record_timecode() const { return bool_value(OPTION_RECORD_TIMECODE); }
 	bool exit_after_playback() const { return bool_value(OPTION_EXIT_AFTER_PLAYBACK); }
 	const char *mng_write() const { return value(OPTION_MNGWRITE); }
 	const char *avi_write() const { return value(OPTION_AVIWRITE); }
@@ -428,6 +427,7 @@ public:
 	const char *joystick_map() const { return value(OPTION_JOYSTICK_MAP); }
 	float joystick_deadzone() const { return float_value(OPTION_JOYSTICK_DEADZONE); }
 	float joystick_saturation() const { return float_value(OPTION_JOYSTICK_SATURATION); }
+	float joystick_threshold() const { return float_value(OPTION_JOYSTICK_THRESHOLD); }
 	bool steadykey() const { return bool_value(OPTION_STEADYKEY); }
 	bool ui_active() const { return bool_value(OPTION_UI_ACTIVE); }
 	bool offscreen_reload() const { return bool_value(OPTION_OFFSCREEN_RELOAD); }
@@ -504,6 +504,7 @@ private:
 	struct software_options
 	{
 		std::unordered_map<std::string, std::string>    slot;
+		std::unordered_map<std::string, std::string>    slot_defaults;
 		std::unordered_map<std::string, std::string>    image;
 	};
 

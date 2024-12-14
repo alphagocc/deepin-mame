@@ -1,25 +1,7 @@
-// AsmJit - Machine code generation for C++
+// This file is part of AsmJit project <https://asmjit.com>
 //
-//  * Official AsmJit Home Page: https://asmjit.com
-//  * Official Github Repository: https://github.com/asmjit/asmjit
-//
-// Copyright (c) 2008-2020 The AsmJit Authors
-//
-// This software is provided 'as-is', without any express or implied
-// warranty. In no event will the authors be held liable for any damages
-// arising from the use of this software.
-//
-// Permission is granted to anyone to use this software for any purpose,
-// including commercial applications, and to alter it and redistribute it
-// freely, subject to the following restrictions:
-//
-// 1. The origin of this software must not be misrepresented; you must not
-//    claim that you wrote the original software. If you use this software
-//    in a product, an acknowledgment in the product documentation would be
-//    appreciated but is not required.
-// 2. Altered source versions must be plainly marked as such, and must not be
-//    misrepresented as being the original software.
-// 3. This notice may not be removed or altered from any source distribution.
+// See asmjit.h or LICENSE.md for license and copyright information
+// SPDX-License-Identifier: Zlib
 
 #ifndef ASMJIT_CORE_CONSTPOOL_H_INCLUDED
 #define ASMJIT_CORE_CONSTPOOL_H_INCLUDED
@@ -33,22 +15,24 @@ ASMJIT_BEGIN_NAMESPACE
 //! \addtogroup asmjit_utilities
 //! \{
 
-// ============================================================================
-// [asmjit::ConstPool]
-// ============================================================================
+//! Constant pool scope.
+enum class ConstPoolScope : uint32_t {
+  //! Local constant, always embedded right after the current function.
+  kLocal = 0,
+  //! Global constant, embedded at the end of the currently compiled code.
+  kGlobal = 1,
+
+  //! Maximum value of `ConstPoolScope`.
+  kMaxValue = kGlobal
+};
 
 //! Constant pool.
+//!
+//! Constant pool is designed to hold 1, 2, 4, 8, 16, 32, and 64 byte constants. It's not designed to hold constants
+//! having arbitrary length like strings and arrays.
 class ConstPool {
 public:
   ASMJIT_NONCOPYABLE(ConstPool)
-
-  //! Constant pool scope.
-  enum Scope : uint32_t {
-    //! Local constant, always embedded right after the current function.
-    kScopeLocal = 0,
-    //! Global constant, embedded at the end of the currently compiled code.
-    kScopeGlobal = 1
-  };
 
   //! \cond INTERNAL
 
@@ -60,7 +44,8 @@ public:
     kIndex8 = 3,
     kIndex16 = 4,
     kIndex32 = 5,
-    kIndexCount = 6
+    kIndex64 = 6,
+    kIndexCount = 7
   };
 
   //! Zone-allocated const-pool gap created by two differently aligned constants.
@@ -83,12 +68,12 @@ public:
     //! Data offset from the beginning of the pool.
     uint32_t _offset;
 
-    inline Node(size_t offset, bool shared) noexcept
+    ASMJIT_INLINE_NODEBUG Node(size_t offset, bool shared) noexcept
       : ZoneTreeNodeT<Node>(),
         _shared(shared),
         _offset(uint32_t(offset)) {}
 
-    inline void* data() const noexcept {
+    ASMJIT_INLINE_NODEBUG void* data() const noexcept {
       return static_cast<void*>(const_cast<ConstPool::Node*>(this) + 1);
     }
   };
@@ -98,14 +83,14 @@ public:
   public:
     size_t _dataSize;
 
-    inline Compare(size_t dataSize) noexcept
+    ASMJIT_INLINE_NODEBUG Compare(size_t dataSize) noexcept
       : _dataSize(dataSize) {}
 
-    inline int operator()(const Node& a, const Node& b) const noexcept {
+    ASMJIT_INLINE_NODEBUG int operator()(const Node& a, const Node& b) const noexcept {
       return ::memcmp(a.data(), b.data(), _dataSize);
     }
 
-    inline int operator()(const Node& a, const void* data) const noexcept {
+    ASMJIT_INLINE_NODEBUG int operator()(const Node& a, const void* data) const noexcept {
       return ::memcmp(a.data(), data, _dataSize);
     }
   };
@@ -119,30 +104,30 @@ public:
     //! Size of the data.
     size_t _dataSize;
 
-    inline explicit Tree(size_t dataSize = 0) noexcept
+    ASMJIT_INLINE_NODEBUG explicit Tree(size_t dataSize = 0) noexcept
       : _tree(),
         _size(0),
         _dataSize(dataSize) {}
 
-    inline void reset() noexcept {
+    ASMJIT_INLINE_NODEBUG void reset() noexcept {
       _tree.reset();
       _size = 0;
     }
 
-    inline bool empty() const noexcept { return _size == 0; }
-    inline size_t size() const noexcept { return _size; }
+    ASMJIT_INLINE_NODEBUG bool empty() const noexcept { return _size == 0; }
+    ASMJIT_INLINE_NODEBUG size_t size() const noexcept { return _size; }
 
     inline void setDataSize(size_t dataSize) noexcept {
       ASMJIT_ASSERT(empty());
       _dataSize = dataSize;
     }
 
-    inline Node* get(const void* data) noexcept {
+    ASMJIT_INLINE_NODEBUG Node* get(const void* data) noexcept {
       Compare cmp(_dataSize);
       return _tree.get(data, cmp);
     }
 
-    inline void insert(Node* node) noexcept {
+    ASMJIT_INLINE_NODEBUG void insert(Node* node) noexcept {
       Compare cmp(_dataSize);
       _tree.insert(node, cmp);
       _size++;
@@ -185,13 +170,16 @@ public:
       Node* node = zone->allocT<Node>(sizeof(Node) + size);
       if (ASMJIT_UNLIKELY(!node)) return nullptr;
 
-      node = new(node) Node(offset, shared);
+      node = new(Support::PlacementNew{node}) Node(offset, shared);
       memcpy(node->data(), data, size);
       return node;
     }
   };
 
   //! \endcond
+
+  //! \name Members
+  //! \{
 
   //! Zone allocator.
   Zone* _zone;
@@ -206,13 +194,25 @@ public:
   size_t _size;
   //! Required pool alignment.
   size_t _alignment;
+  //! Minimum item size in the pool.
+  size_t _minItemSize;
+
+  //! \}
 
   //! \name Construction & Destruction
   //! \{
 
-  ASMJIT_API ConstPool(Zone* zone) noexcept;
+  //! Creates a new constant pool that would use `zone` as a memory allocator.
+  ASMJIT_API explicit ConstPool(Zone* zone) noexcept;
+  //! Destroys this constant pool.
   ASMJIT_API ~ConstPool() noexcept;
 
+  //! \}
+
+  //! \name Reset
+  //! \{
+
+  //! Resets this constant pool and its allocator to `zone`.
   ASMJIT_API void reset(Zone* zone) noexcept;
 
   //! \}
@@ -221,11 +221,13 @@ public:
   //! \{
 
   //! Tests whether the constant-pool is empty.
-  inline bool empty() const noexcept { return _size == 0; }
+  ASMJIT_INLINE_NODEBUG bool empty() const noexcept { return _size == 0; }
   //! Returns the size of the constant-pool in bytes.
-  inline size_t size() const noexcept { return _size; }
+  ASMJIT_INLINE_NODEBUG size_t size() const noexcept { return _size; }
   //! Returns minimum alignment.
-  inline size_t alignment() const noexcept { return _alignment; }
+  ASMJIT_INLINE_NODEBUG size_t alignment() const noexcept { return _alignment; }
+  //! Returns the minimum size of all items added to the constant pool.
+  ASMJIT_INLINE_NODEBUG size_t minItemSize() const noexcept { return _minItemSize; }
 
   //! \}
 
@@ -234,21 +236,18 @@ public:
 
   //! Adds a constant to the constant pool.
   //!
-  //! The constant must have known size, which is 1, 2, 4, 8, 16 or 32 bytes.
-  //! The constant is added to the pool only if it doesn't not exist, otherwise
-  //! cached value is returned.
+  //! The constant must have known size, which is 1, 2, 4, 8, 16 or 32 bytes. The constant is added to the pool only
+  //! if it doesn't not exist, otherwise cached value is returned.
   //!
-  //! AsmJit is able to subdivide added constants, so for example if you add
-  //! 8-byte constant 0x1122334455667788 it will create the following slots:
+  //! AsmJit is able to subdivide added constants, so for example if you add 8-byte constant 0x1122334455667788 it
+  //! will create the following slots:
   //!
   //!   8-byte: 0x1122334455667788
   //!   4-byte: 0x11223344, 0x55667788
   //!
-  //! The reason is that when combining MMX/SSE/AVX code some patterns are used
-  //! frequently. However, AsmJit is not able to reallocate a constant that has
-  //! been already added. For example if you try to add 4-byte constant and then
-  //! 8-byte constant having the same 4-byte pattern as the previous one, two
-  //! independent slots will be generated by the pool.
+  //! The reason is that when combining MMX/SSE/AVX code some patterns are used frequently. However, AsmJit is not
+  //! able to reallocate a constant that has been already added. For example if you try to add 4-byte constant and
+  //! then 8-byte constant having the same 4-byte pattern as the previous one, two independent slots will be used.
   ASMJIT_API Error add(const void* data, size_t size, size_t& dstOffset) noexcept;
 
   //! Fills the destination with the content of this constant pool.

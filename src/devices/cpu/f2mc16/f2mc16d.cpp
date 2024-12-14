@@ -349,7 +349,7 @@ offs_t f2mc16_disassembler::dasm_bitop(std::ostream &stream, offs_t pc, u32 byte
 		{
 			stream << ", ";
 			format_rel(stream, pc + bytes + 1, opcodes.r8(pc + bytes));
-			++bytes;
+			return (bytes + 1) | STEP_COND | SUPPORTED;
 		}
 		else if ((op2 & 0xe0) == 0x20)
 			stream << ", A";
@@ -416,7 +416,7 @@ offs_t f2mc16_disassembler::dasm_cstrop(std::ostream &stream, offs_t pc, u32 byt
 	}
 	else if ((op2 & 0xcc) == 0x80)
 		util::stream_format(stream, "%-8s%s", s_sceq_ops[BIT(op2, 4, 2)], s_segment_prefixes[BIT(op2, 0, 2)]);
-	else if ((op2 & 0xec) == 0xc0)
+	else if ((op2 & 0xdc) == 0xc0)
 		util::stream_format(stream, "%-8s%s", op2 >= 0xe0 ? "FILSWI" : "FILSI", s_segment_prefixes[BIT(op2, 0, 2)]);
 	else
 	{
@@ -710,8 +710,7 @@ offs_t f2mc16_disassembler::dasm_eainst(std::ostream &stream, offs_t pc, u32 byt
 		format_imm8(stream, opcodes.r8(pc + bytes));
 		stream << ", ";
 		format_rel(stream, pc + bytes + 2, opcodes.r8(pc + bytes + 1));
-		bytes += 2;
-		break;
+		return (bytes + 2) | STEP_COND | SUPPORTED;
 
 	case 0x01:
 		util::stream_format(stream, "%-8s@", "JMPP");
@@ -881,8 +880,7 @@ offs_t f2mc16_disassembler::dasm_eainst(std::ostream &stream, offs_t pc, u32 byt
 		bytes += dasm_ea8(stream, pc + bytes, op2, segm, opcodes);
 		stream << ", ";
 		format_rel(stream, pc + bytes + 1, opcodes.r8(pc + bytes));
-		++bytes;
-		break;
+		return (bytes + 1) | STEP_COND | SUPPORTED;
 
 	case 0x05:
 		util::stream_format(stream, "%-8s", "ADD");
@@ -969,8 +967,7 @@ offs_t f2mc16_disassembler::dasm_eainst(std::ostream &stream, offs_t pc, u32 byt
 		bytes += dasm_ea16(stream, pc + bytes, op2, segm, opcodes);
 		stream << ", ";
 		format_rel(stream, pc + bytes + 1, opcodes.r8(pc + bytes));
-		++bytes;
-		break;
+		return (bytes + 1) | STEP_COND | SUPPORTED;
 
 	case 0x07:
 		util::stream_format(stream, "%-8s", "ADDW");
@@ -1061,7 +1058,7 @@ offs_t f2mc16_disassembler::disassemble(std::ostream &stream, offs_t pc, const f
 	{
 		util::stream_format(stream, "%-8s", s_bcc_ops[op & 0x0f]);
 		format_rel(stream, pc + bytes + 1, opcodes.r8(pc + bytes));
-		++bytes;
+		return (bytes + 1) | STEP_COND | SUPPORTED;
 	}
 	else if (op >= 0xe0)
 	{
@@ -1278,8 +1275,7 @@ offs_t f2mc16_disassembler::disassemble(std::ostream &stream, offs_t pc, const f
 		format_imm8(stream, opcodes.r8(pc + bytes++));
 		stream << ", ";
 		format_rel(stream, pc + bytes + 1, opcodes.r8(pc + bytes));
-		++bytes;
-		break;
+		return (bytes + 1) | STEP_COND | SUPPORTED;
 
 	case 0x2b: case 0x3b:
 		util::stream_format(stream, "%-8sA", "CMPW");
@@ -1326,17 +1322,9 @@ offs_t f2mc16_disassembler::disassemble(std::ostream &stream, offs_t pc, const f
 		break;
 
 	case 0x30: case 0x31:
-	{
-		u8 operand = opcodes.r8(pc + bytes++);
-		if (operand == 0x01)
-			util::stream_format(stream, "%-8sA", BIT(op, 0) ? "DEC" : "INC");
-		else
-		{
-			util::stream_format(stream, "%-8sA, ", BIT(op, 0) ? "SUB" : "ADD");
-			format_imm_signed(stream, s32(s8(operand)));
-		}
+		util::stream_format(stream, "%-8sA, ", BIT(op, 0) ? "SUB" : "ADD");
+		format_imm_signed(stream, s32(s8(opcodes.r8(pc + bytes++))));
 		break;
-	}
 
 	case 0x32:
 		util::stream_format(stream, "%-8sA", "SUBC");

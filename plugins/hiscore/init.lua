@@ -14,7 +14,8 @@ local exports = {
 
 local hiscore = exports
 
-local hiscore_plugin_path = ""
+local hiscore_plugin_path
+local reset_subscription, frame_subscription, stop_subscription
 
 function hiscore.set_folder(path)
 	hiscore_plugin_path = path
@@ -23,7 +24,7 @@ end
 function hiscore.startplugin()
 
 	local function get_data_path()
-		return emu.subst_env(manager.machine.options.entries.homepath:value():match('([^;]+)')) .. '/hiscore/'
+		return manager.machine.options.entries.homepath:value():match('([^;]+)') .. '/hiscore'
 	end
 
 	-- configuration
@@ -35,7 +36,7 @@ function hiscore.startplugin()
 		if config_read then
 			return true
 		end
-		local filename = get_data_path() .. 'plugin.cfg'
+		local filename = get_data_path() .. '/plugin.cfg'
 		local file = io.open(filename, 'r')
 		if file then
 			local json = require('json')
@@ -49,7 +50,7 @@ function hiscore.startplugin()
 				config_read = true
 				return true
 			else
-				emu.print_error(string.format('Error loading hiscore plugin settings: error parsing file "%s" as JSON\n', filename))
+				emu.print_error(string.format('Error loading hiscore plugin settings: error parsing file "%s" as JSON', filename))
 			end
 		end
 		return false
@@ -62,17 +63,17 @@ function hiscore.startplugin()
 		if not attr then
 			lfs.mkdir(path)
 		elseif attr.mode ~= 'directory' then
-			emu.print_error(string.format('Error saving hiscore plugin settings: "%s" is not a directory\n', path))
+			emu.print_error(string.format('Error saving hiscore plugin settings: "%s" is not a directory', path))
 			return
 		end
 		local settings = { only_save_at_exit = not timed_save }
 		-- TODO: other settings?
-		local filename = path .. 'plugin.cfg'
+		local filename = path .. '/plugin.cfg'
 		local json = require('json')
 		local data = json.stringify(settings, { indent = true })
 		local file = io.open(filename, 'w')
 		if not file then
-			emu.print_error(string.format('Error saving hiscore plugin settings: error opening file "%s" for writing\n', filename))
+			emu.print_error(string.format('Error saving hiscore plugin settings: error opening file "%s" for writing', filename))
 			return
 		end
 		file:write(data)
@@ -174,7 +175,7 @@ function hiscore.startplugin()
 			  end
 			elseif string.find(line, rm_match) then --- match this game
 			  current_is_match = true;
-			elseif string.find(line, '^[a-z0-9_]+:') then --- some game
+			elseif string.find(line, '^[a-z0-9_,]+:') then --- some game
 			  if current_is_match and string.len(cluster) > 0 then
 				break; -- we're done
 			  end
@@ -210,9 +211,9 @@ function hiscore.startplugin()
 	  local r;
 	  if emu.softname() ~= "" then
 		local soft = emu.softname():match("([^:]*)$")
-		r = get_data_path() .. emu.romname() .. "_" .. soft .. ".hi";
+		r = get_data_path() .. '/' .. emu.romname() .. "_" .. soft .. ".hi";
 	  else
-		r = get_data_path() .. emu.romname() .. ".hi";
+		r = get_data_path() .. '/' .. emu.romname() .. ".hi";
 	  end
 	  return r;
 	end
@@ -223,7 +224,7 @@ function hiscore.startplugin()
 	  local output = io.open(get_file_name(), "wb");
 	  if not output then
 		-- attempt to create the directory, and try again
-		lfs.mkdir( get_data_path() );
+		lfs.mkdir(get_data_path());
 		output = io.open(get_file_name(), "wb");
 	  end
 	  emu.print_verbose("hiscore: write_scores output")
@@ -328,7 +329,7 @@ function hiscore.startplugin()
 		scores_have_been_read = false;
 	end
 
-	emu.register_start(function()
+	reset_subscription = emu.add_machine_reset_notifier(function ()
 		found_hiscore_entry = false
 		mem_check_passed = false
 		scores_have_been_read = false;
@@ -354,18 +355,18 @@ function hiscore.startplugin()
 		end
 	end)
 
-	emu.register_frame(function()
+	frame_subscription = emu.add_machine_frame_notifier(function ()
 		if found_hiscore_entry then
 			tick()
 		end
 	end)
 
-	emu.register_stop(function()
+	stop_subscription = emu.add_machine_stop_notifier(function ()
 		reset()
 		save_config()
 	end)
 
-	emu.register_prestart(function()
+	emu.register_prestart(function ()
 		reset()
 	end)
 

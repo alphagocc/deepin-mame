@@ -387,10 +387,10 @@ void symbol_table::set_memory_modified_func(memory_modified_func modified)
 //  add - add a new u64 pointer symbol
 //-------------------------------------------------
 
-void symbol_table::add(const char *name, read_write rw, u64 *ptr)
+symbol_entry &symbol_table::add(const char *name, read_write rw, u64 *ptr)
 {
 	m_symlist.erase(name);
-	m_symlist.emplace(name, std::make_unique<integer_symbol_entry>(*this, name, rw, ptr));
+	return *m_symlist.emplace(name, std::make_unique<integer_symbol_entry>(*this, name, rw, ptr)).first->second;
 }
 
 
@@ -398,10 +398,10 @@ void symbol_table::add(const char *name, read_write rw, u64 *ptr)
 //  add - add a new value symbol
 //-------------------------------------------------
 
-void symbol_table::add(const char *name, u64 value)
+symbol_entry &symbol_table::add(const char *name, u64 value)
 {
 	m_symlist.erase(name);
-	m_symlist.emplace(name, std::make_unique<integer_symbol_entry>(*this, name, value));
+	return *m_symlist.emplace(name, std::make_unique<integer_symbol_entry>(*this, name, value)).first->second;
 }
 
 
@@ -409,10 +409,10 @@ void symbol_table::add(const char *name, u64 value)
 //  add - add a new register symbol
 //-------------------------------------------------
 
-void symbol_table::add(const char *name, getter_func getter, setter_func setter, const std::string &format_string)
+symbol_entry &symbol_table::add(const char *name, getter_func getter, setter_func setter, const std::string &format_string)
 {
 	m_symlist.erase(name);
-	m_symlist.emplace(name, std::make_unique<integer_symbol_entry>(*this, name, getter, setter, format_string));
+	return *m_symlist.emplace(name, std::make_unique<integer_symbol_entry>(*this, name, getter, setter, format_string)).first->second;
 }
 
 
@@ -420,10 +420,10 @@ void symbol_table::add(const char *name, getter_func getter, setter_func setter,
 //  add - add a new function symbol
 //-------------------------------------------------
 
-void symbol_table::add(const char *name, int minparams, int maxparams, execute_func execute)
+symbol_entry &symbol_table::add(const char *name, int minparams, int maxparams, execute_func execute)
 {
 	m_symlist.erase(name);
-	m_symlist.emplace(name, std::make_unique<function_symbol_entry>(*this, name, minparams, maxparams, execute));
+	return *m_symlist.emplace(name, std::make_unique<function_symbol_entry>(*this, name, minparams, maxparams, execute)).first->second;
 }
 
 
@@ -482,23 +482,25 @@ u64 symbol_table::read_memory(address_space &space, offs_t address, int size, bo
 {
 	u64 result = ~u64(0) >> (64 - 8*size);
 
+	address_space *tspace = &space;
+
 	if (apply_translation)
 	{
 		// mask against the logical byte mask
 		address &= space.logaddrmask();
 
 		// translate if necessary; if not mapped, return 0xffffffffffffffff
-		if (!space.device().memory().translate(space.spacenum(), TRANSLATE_READ_DEBUG, address))
+		if (!space.device().memory().translate(space.spacenum(), device_memory_interface::TR_READ, address, tspace))
 			return result;
 	}
 
 	// otherwise, call the reading function for the translated address
 	switch (size)
 	{
-	case 1:     result = space.read_byte(address);              break;
-	case 2:     result = space.read_word_unaligned(address);    break;
-	case 4:     result = space.read_dword_unaligned(address);   break;
-	case 8:     result = space.read_qword_unaligned(address);   break;
+	case 1:     result = tspace->read_byte(address);              break;
+	case 2:     result = tspace->read_word_unaligned(address);    break;
+	case 4:     result = tspace->read_dword_unaligned(address);   break;
+	case 8:     result = tspace->read_qword_unaligned(address);   break;
 	}
 	return result;
 }
@@ -511,23 +513,25 @@ u64 symbol_table::read_memory(address_space &space, offs_t address, int size, bo
 
 void symbol_table::write_memory(address_space &space, offs_t address, u64 data, int size, bool apply_translation)
 {
+	address_space *tspace = &space;
+
 	if (apply_translation)
 	{
 		// mask against the logical byte mask
 		address &= space.logaddrmask();
 
 		// translate if necessary; if not mapped, we're done
-		if (!space.device().memory().translate(space.spacenum(), TRANSLATE_WRITE_DEBUG, address))
+		if (!space.device().memory().translate(space.spacenum(), device_memory_interface::TR_WRITE, address, tspace))
 			return;
 	}
 
 	// otherwise, call the writing function for the translated address
 	switch (size)
 	{
-	case 1:     space.write_byte(address, data);            break;
-	case 2:     space.write_word_unaligned(address, data);  break;
-	case 4:     space.write_dword_unaligned(address, data); break;
-	case 8:     space.write_qword_unaligned(address, data); break;
+	case 1:     tspace->write_byte(address, data);            break;
+	case 2:     tspace->write_word_unaligned(address, data);  break;
+	case 4:     tspace->write_dword_unaligned(address, data); break;
+	case 8:     tspace->write_qword_unaligned(address, data); break;
 	}
 
 	notify_memory_modified();
@@ -1736,7 +1740,7 @@ void parsed_expression::infix_to_postfix()
 		else if (token->is_operator())
 		{
 			// normalize the operator based on neighbors
-			normalize_operator(*token, prev, next != m_tokenlist.end() ? &*next : nullptr, stack, was_rparen);
+			normalize_operator(*token, prev, next != origlist.end() ? &*next : nullptr, stack, was_rparen);
 			was_rparen = false;
 
 			// if the token is an opening parenthesis, push it onto the stack.

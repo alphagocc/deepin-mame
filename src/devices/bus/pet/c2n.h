@@ -12,7 +12,6 @@
 #pragma once
 
 #include "cass.h"
-#include "formats/cbm_tap.h"
 #include "imagedev/cassette.h"
 
 
@@ -34,17 +33,18 @@ protected:
 	c2n_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
 
 	// optional information overrides
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 	// device_pet_datassette_port_interface overrides
 	virtual int datassette_read() override;
 	virtual void datassette_write(int state) override;
 	virtual int datassette_sense() override;
 	virtual void datassette_motor(int state) override;
+
+	TIMER_CALLBACK_MEMBER(read_tick);
 
 private:
 	required_device<cassette_image_device> m_cassette;

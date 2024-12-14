@@ -16,10 +16,8 @@
 #include "tms34010.h"
 #include "34010dsm.h"
 
-#include "debugger.h"
 #include "screen.h"
 
-#define LOG_GENERAL      (1U << 0)
 #define LOG_CONTROL_REGS (1U << 1)
 #define LOG_GRAPHICS_OPS (1U << 2)
 
@@ -228,14 +226,14 @@ inline void tms340x0_device::RESET_ST()
 }
 
 /* shortcuts for reading opcodes */
-uint32_t tms34010_device::ROPCODE()
+uint16_t tms34010_device::ROPCODE()
 {
 	uint32_t pc = m_pc;
 	m_pc += 2 << 3;
 	return m_cache.read_word(pc);
 }
 
-uint32_t tms34020_device::ROPCODE()
+uint16_t tms34020_device::ROPCODE()
 {
 	uint32_t pc = m_pc;
 	m_pc += 2 << 3;
@@ -692,15 +690,15 @@ void tms340x0_device::check_interrupt()
 	/* if we took something, generate it */
 	if (vector)
 	{
+		/* call the callback for externals */
+		if (irqline >= 0)
+			standard_irq_callback(irqline, m_pc);
+
 		PUSH(m_pc);
 		PUSH(m_st);
 		RESET_ST();
 		m_pc = RLONG(vector);
 		COUNT_CYCLES(16);
-
-		/* call the callback for externals */
-		if (irqline >= 0)
-			standard_irq_callback(irqline);
 	}
 }
 
@@ -714,8 +712,6 @@ void tms340x0_device::device_start()
 {
 	m_scanline_ind16_cb.resolve();
 	m_scanline_rgb32_cb.resolve();
-	m_output_int_cb.resolve();
-	m_ioreg_pre_write_cb.resolve();
 	m_to_shiftreg_cb.resolve();
 	m_from_shiftreg_cb.resolve();
 
@@ -741,7 +737,7 @@ void tms340x0_device::device_start()
 	}
 
 	/* allocate a scanline timer and set it to go off at the start */
-	m_scantimer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(tms340x0_device::scanline_callback), this));
+	m_scantimer = timer_alloc(FUNC(tms340x0_device::scanline_callback), this);
 	m_scantimer->adjust(attotime::zero);
 
 	save_item(NAME(m_pc));
@@ -867,6 +863,7 @@ void tms340x0_device::execute_run()
 	/* Get out if CPU is halted. Absolutely no interrupts must be taken!!! */
 	if (IOREG(REG_HSTCTLH) & 0x8000)
 	{
+		debugger_wait_hook();
 		m_icount = 0;
 		return;
 	}
@@ -887,7 +884,7 @@ void tms340x0_device::execute_run()
 			uint16_t op;
 			m_ppc = m_pc;
 			op = ROPCODE();
-			(this->*s_opcode_table[op >> 4])(op);
+			execute_op(op);
 		} while (m_icount > 0);
 	}
 	else
@@ -898,10 +895,20 @@ void tms340x0_device::execute_run()
 			m_ppc = m_pc;
 			debugger_instruction_hook(m_pc);
 			op = ROPCODE();
-			(this->*s_opcode_table[op >> 4])(op);
+			execute_op(op);
 		} while (m_icount > 0);
 	}
 	m_executing = false;
+}
+
+void tms34010_device::execute_op(uint16_t op)
+{
+	(this->*s_opcode_table[op >> 4])(op);
+}
+
+void tms34020_device::execute_op(uint16_t op)
+{
+	(this->*s_opcode_table[op >> 4])(op);
 }
 
 
@@ -964,14 +971,14 @@ void tms340x0_device::set_pixel_function()
 
 const tms340x0_device::raster_op_func tms340x0_device::s_raster_ops[32] =
 {
-				nullptr, &tms340x0_device::raster_op_1 , &tms340x0_device::raster_op_2 , &tms340x0_device::raster_op_3,
-	&tms340x0_device::raster_op_4 , &tms340x0_device::raster_op_5 , &tms340x0_device::raster_op_6 , &tms340x0_device::raster_op_7,
-	&tms340x0_device::raster_op_8 , &tms340x0_device::raster_op_9 , &tms340x0_device::raster_op_10, &tms340x0_device::raster_op_11,
+	nullptr,                        &tms340x0_device::raster_op_1,  &tms340x0_device::raster_op_2,  &tms340x0_device::raster_op_3,
+	&tms340x0_device::raster_op_4,  &tms340x0_device::raster_op_5,  &tms340x0_device::raster_op_6,  &tms340x0_device::raster_op_7,
+	&tms340x0_device::raster_op_8,  &tms340x0_device::raster_op_9,  &tms340x0_device::raster_op_10, &tms340x0_device::raster_op_11,
 	&tms340x0_device::raster_op_12, &tms340x0_device::raster_op_13, &tms340x0_device::raster_op_14, &tms340x0_device::raster_op_15,
 	&tms340x0_device::raster_op_16, &tms340x0_device::raster_op_17, &tms340x0_device::raster_op_18, &tms340x0_device::raster_op_19,
-	&tms340x0_device::raster_op_20, &tms340x0_device::raster_op_21,            nullptr,            nullptr,
-				nullptr,            nullptr,            nullptr,            nullptr,
-				nullptr,            nullptr,            nullptr,            nullptr,
+	&tms340x0_device::raster_op_20, &tms340x0_device::raster_op_21, nullptr,                        nullptr,
+	nullptr,                        nullptr,                        nullptr,                        nullptr,
+	nullptr,                        nullptr,                        nullptr,                        nullptr,
 };
 
 
@@ -1013,7 +1020,7 @@ TIMER_CALLBACK_MEMBER( tms340x0_device::scanline_callback )
 	if (enabled && vcount == SMART_IOREG(DPYINT))
 	{
 		/* generate the display interrupt signal */
-		internal_interrupt_callback(nullptr, TMS34010_DI);
+		internal_interrupt_callback(TMS34010_DI);
 	}
 
 	/* at the start of VBLANK, load the starting display address */
@@ -1236,7 +1243,7 @@ static const char *const ioreg_name[] =
 
 void tms34010_device::io_register_w(offs_t offset, u16 data, u16 mem_mask)
 {
-	if (!m_ioreg_pre_write_cb.isnull())
+	if (!m_ioreg_pre_write_cb.isunset())
 		m_ioreg_pre_write_cb(offset, data, mem_mask);
 
 	int oldreg, newreg;
@@ -1311,15 +1318,9 @@ void tms34010_device::io_register_w(offs_t offset, u16 data, u16 mem_mask)
 
 				/* the TMS34010 can set output interrupt? */
 				if (!(oldreg & 0x0080) && (newreg & 0x0080))
-				{
-					if (!m_output_int_cb.isnull())
-						m_output_int_cb(1);
-				}
+					m_output_int_cb(1);
 				else if ((oldreg & 0x0080) && !(newreg & 0x0080))
-				{
-					if (!m_output_int_cb.isnull())
-						m_output_int_cb(0);
-				}
+					m_output_int_cb(0);
 
 				/* input interrupt? (should really be state-based, but the functions don't exist!) */
 				if (!(oldreg & 0x0008) && (newreg & 0x0008))
@@ -1387,7 +1388,7 @@ static const char *const ioreg020_name[] =
 
 void tms34020_device::io_register_w(offs_t offset, u16 data, u16 mem_mask)
 {
-	if (!m_ioreg_pre_write_cb.isnull())
+	if (!m_ioreg_pre_write_cb.isunset())
 		m_ioreg_pre_write_cb(offset, data, mem_mask);
 
 	int oldreg, newreg;
@@ -1463,15 +1464,9 @@ void tms34020_device::io_register_w(offs_t offset, u16 data, u16 mem_mask)
 
 			/* the TMS34010 can set output interrupt? */
 			if (!(oldreg & 0x0080) && (newreg & 0x0080))
-			{
-				if (!m_output_int_cb.isnull())
-					m_output_int_cb(1);
-			}
+				m_output_int_cb(1);
 			else if ((oldreg & 0x0080) && !(newreg & 0x0080))
-			{
-				if (!m_output_int_cb.isnull())
-					m_output_int_cb(0);
-			}
+				m_output_int_cb(0);
 
 			/* input interrupt? (should really be state-based, but the functions don't exist!) */
 			if (!(oldreg & 0x0008) && (newreg & 0x0008))
@@ -1553,7 +1548,8 @@ u16 tms34010_device::io_register_r(offs_t offset)
 {
 	int result, total;
 
-	LOGCONTROLREGS("%s: read %s\n", machine().describe_context(), ioreg_name[offset]);
+	if (!machine().side_effects_disabled())
+		LOGCONTROLREGS("%s: read %s\n", machine().describe_context(), ioreg_name[offset]);
 
 	switch (offset)
 	{
@@ -1594,7 +1590,8 @@ u16 tms34020_device::io_register_r(offs_t offset)
 {
 	int result, total;
 
-	LOGCONTROLREGS("%s: read %s\n", machine().describe_context(), ioreg020_name[offset]);
+	if (!machine().side_effects_disabled())
+		LOGCONTROLREGS("%s: read %s\n", machine().describe_context(), ioreg020_name[offset]);
 
 	switch (offset)
 	{
@@ -1724,13 +1721,16 @@ u16 tms340x0_device::host_r(offs_t offset)
 			addr = (IOREG(REG_HSTADRH) << 16) | IOREG(REG_HSTADRL);
 			result = TMS34010_RDMEM_WORD(addr & 0xfffffff0);
 
-			/* optional postincrement (it says preincrement, but data is preloaded, so it
-			   is effectively a postincrement */
-			if (IOREG(REG_HSTCTLH) & 0x1000)
+			if (!machine().side_effects_disabled())
 			{
-				addr += 0x10;
-				IOREG(REG_HSTADRH) = addr >> 16;
-				IOREG(REG_HSTADRL) = (uint16_t)addr;
+				/* optional postincrement (it says preincrement, but data is preloaded, so it
+				   is effectively a postincrement */
+				if (IOREG(REG_HSTCTLH) & 0x1000)
+				{
+					addr += 0x10;
+					IOREG(REG_HSTADRH) = addr >> 16;
+					IOREG(REG_HSTADRL) = (uint16_t)addr;
+				}
 			}
 			break;
 
@@ -1741,7 +1741,8 @@ u16 tms340x0_device::host_r(offs_t offset)
 
 		/* error case */
 		default:
-			logerror("tms34010_host_control_r called on invalid register %d\n", reg);
+			if (!machine().side_effects_disabled())
+				logerror("tms34010_host_control_r called on invalid register %d\n", reg);
 			break;
 	}
 

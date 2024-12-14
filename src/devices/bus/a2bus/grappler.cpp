@@ -76,22 +76,22 @@ protected:
 
 protected:
 	// device_t implementation
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
 
 	// helpers
 	void set_rom_bank(u16 rom_bank);
 
 private:
 	// printer status inputs
-	DECLARE_WRITE_LINE_MEMBER(busy_w);
-	DECLARE_WRITE_LINE_MEMBER(pe_w);
-	DECLARE_WRITE_LINE_MEMBER(slct_w);
+	void busy_w(int state);
+	void pe_w(int state);
+	void slct_w(int state);
 
 	// synchronised printer status inputs
-	void set_busy_in(void *ptr, s32 param);
-	void set_pe_in(void *ptr, s32 param);
-	void set_slct_in(void *ptr, s32 param);
+	void set_busy_in(s32 param);
+	void set_pe_in(s32 param);
+	void set_slct_in(s32 param);
 
 	u16 m_rom_bank;     // U2D (pin 13)
 	u8  m_busy_in;      // printer connector pin 21 (synchronised)
@@ -169,19 +169,19 @@ void a2bus_grappler_device_base::set_rom_bank(u16 rom_bank)
 //  printer status inputs
 //--------------------------------------------------
 
-WRITE_LINE_MEMBER(a2bus_grappler_device_base::busy_w)
+void a2bus_grappler_device_base::busy_w(int state)
 {
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(a2bus_grappler_device_base::set_busy_in), this), state ? 1 : 0);
 }
 
 
-WRITE_LINE_MEMBER(a2bus_grappler_device_base::pe_w)
+void a2bus_grappler_device_base::pe_w(int state)
 {
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(a2bus_grappler_device_base::set_pe_in), this), state ? 1 : 0);
 }
 
 
-WRITE_LINE_MEMBER(a2bus_grappler_device_base::slct_w)
+void a2bus_grappler_device_base::slct_w(int state)
 {
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(a2bus_grappler_device_base::set_slct_in), this), state ? 1 : 0);
 }
@@ -192,7 +192,7 @@ WRITE_LINE_MEMBER(a2bus_grappler_device_base::slct_w)
 //  synchronised printer status inputs
 //--------------------------------------------------
 
-void a2bus_grappler_device_base::set_busy_in(void *ptr, s32 param)
+void a2bus_grappler_device_base::set_busy_in(s32 param)
 {
 	if (u32(param) != m_busy_in)
 	{
@@ -202,7 +202,7 @@ void a2bus_grappler_device_base::set_busy_in(void *ptr, s32 param)
 }
 
 
-void a2bus_grappler_device_base::set_pe_in(void *ptr, s32 param)
+void a2bus_grappler_device_base::set_pe_in(s32 param)
 {
 	if (u32(param) != m_pe_in)
 	{
@@ -212,7 +212,7 @@ void a2bus_grappler_device_base::set_pe_in(void *ptr, s32 param)
 }
 
 
-void a2bus_grappler_device_base::set_slct_in(void *ptr, s32 param)
+void a2bus_grappler_device_base::set_slct_in(s32 param)
 {
 	if (u32(param) != m_slct_in)
 	{
@@ -241,18 +241,18 @@ public:
 protected:
 	// device_t implementation
 	virtual tiny_rom_entry const *device_rom_region() const override { return ROM_NAME(grappler); }
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 private:
 	// printer status inputs
-	DECLARE_WRITE_LINE_MEMBER(ack_w);
+	void ack_w(int state);
 
 	// synchronised signals
-	void set_data(void *ptr, s32 param);
-	void set_strobe(void *ptr, s32 param);
-	void set_ack_in(void *ptr, s32 param);
+	void set_data(s32 param);
+	void set_strobe(s32 param);
+	void set_ack_in(s32 param);
 
 	u8  m_strobe;       // U3 (pin 4)
 	u8  m_ack_latch;    // U3 (pin 13)
@@ -362,7 +362,7 @@ void a2bus_grappler_device::device_reset()
 //  printer status inputs
 //--------------------------------------------------
 
-WRITE_LINE_MEMBER(a2bus_grappler_device::ack_w)
+void a2bus_grappler_device::ack_w(int state)
 {
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(a2bus_grappler_device::set_ack_in), this), state ? 1 : 0);
 }
@@ -373,14 +373,14 @@ WRITE_LINE_MEMBER(a2bus_grappler_device::ack_w)
 //  synchronised signals
 //--------------------------------------------------
 
-void a2bus_grappler_device::set_data(void *ptr, s32 param)
+void a2bus_grappler_device::set_data(s32 param)
 {
 	LOG("Output data %02X\n", u8(u32(param)));
 	m_printer_out->write(u8(u32(param)));
 }
 
 
-void a2bus_grappler_device::set_strobe(void *ptr, s32 param)
+void a2bus_grappler_device::set_strobe(s32 param)
 {
 	LOG("Output /STROBE=%d\n", param);
 	m_printer_conn->write_strobe(param);
@@ -403,7 +403,7 @@ void a2bus_grappler_device::set_strobe(void *ptr, s32 param)
 }
 
 
-void a2bus_grappler_device::set_ack_in(void *ptr, s32 param)
+void a2bus_grappler_device::set_ack_in(s32 param)
 {
 	if (u32(param) != m_ack_in)
 	{
@@ -446,12 +446,12 @@ protected:
 	a2bus_grapplerplus_device_base(machine_config const &mconfig, device_type type, char const *tag, device_t *owner, u32 clock);
 
 	// device_t implementation
-	virtual ioport_constructor device_input_ports() const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// ACK latch set input
-	DECLARE_WRITE_LINE_MEMBER(ack_w);
+	void ack_w(int state);
 
 	// signal state
 	u8 ack_latch() const { return m_ack_latch; }
@@ -460,7 +460,7 @@ protected:
 
 private:
 	// synchronised printer status inputs
-	void set_ack_in(void *ptr, s32 param);
+	void set_ack_in(s32 param);
 
 	// for derived devices to implement
 	virtual void data_latched(u8 data) = 0;
@@ -497,7 +497,7 @@ INPUT_PORTS_START(grapplerplus)
 	PORT_DIPSETTING(   0x06, "Okidata 84 w/o Step II Graphics")
 	PORT_DIPSETTING(   0x05, "Apple Dot Matrix")
 	PORT_DIPSETTING(   0x07, "invalid")
-	PORT_DIPNAME(0x08, 0x08, "Most Significant Bit")            PORT_DIPLOCATION("S1:1")        PORT_CHANGED_MEMBER(DEVICE_SELF, a2bus_grapplerplus_device_base, sw_msb, 0)
+	PORT_DIPNAME(0x08, 0x08, "Most Significant Bit")            PORT_DIPLOCATION("S1:1")        PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(a2bus_grapplerplus_device_base::sw_msb), 0)
 	PORT_DIPSETTING(   0x08, "Software Control")
 	PORT_DIPSETTING(   0x00, "Not Transmitted")
 INPUT_PORTS_END
@@ -581,7 +581,7 @@ void a2bus_grapplerplus_device_base::write_cnxx(u8 offset, u8 data)
 //  ACK latch set input
 //--------------------------------------------------
 
-WRITE_LINE_MEMBER(a2bus_grapplerplus_device_base::ack_w)
+void a2bus_grapplerplus_device_base::ack_w(int state)
 {
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(a2bus_grapplerplus_device_base::set_ack_in), this), state ? 1 : 0);
 }
@@ -592,7 +592,7 @@ WRITE_LINE_MEMBER(a2bus_grapplerplus_device_base::ack_w)
 //  synchronised printer status inputs
 //--------------------------------------------------
 
-void a2bus_grapplerplus_device_base::set_ack_in(void *ptr, s32 param)
+void a2bus_grapplerplus_device_base::set_ack_in(s32 param)
 {
 	if (u32(param) != m_ack_in)
 	{
@@ -631,9 +631,9 @@ public:
 protected:
 	// device_t implementation
 	virtual tiny_rom_entry const *device_rom_region() const override { return ROM_NAME(grapplerplus); }
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 private:
 	// a2bus_grapplerplus_device_base implementation
@@ -746,7 +746,7 @@ void a2bus_grapplerplus_device::device_start()
 {
 	a2bus_grapplerplus_device_base::device_start();
 
-	m_strobe_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(a2bus_grapplerplus_device::update_strobe), this));
+	m_strobe_timer = timer_alloc(FUNC(a2bus_grapplerplus_device::update_strobe), this);
 
 	m_next_strobe = 1U;
 
@@ -855,10 +855,10 @@ protected:
 
 	// device_t implementation
 	virtual tiny_rom_entry const *device_rom_region() const override { return ROM_NAME(bufgrapplerplus); }
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual ioport_constructor device_input_ports() const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// helpers
 	template <typename T> void device_add_mconfig(machine_config &config, T &&mcu_clock);
@@ -868,18 +868,18 @@ private:
 	virtual void data_latched(u8 data) override;
 
 	// printer status inputs
-	DECLARE_WRITE_LINE_MEMBER(buf_ack_w);
+	void buf_ack_w(int state);
 
 	// MCU I/O handlers
-	void mcu_io(address_map &map);
+	void mcu_io(address_map &map) ATTR_COLD;
 	void mcu_p2_w(u8 data);
 	u8 mcu_bus_r();
 	void mcu_bus_w(u8 data);
 
 	// synchronised signals
-	void set_buf_data(void *ptr, s32 param);
-	void set_buf_ack_in(void *ptr, s32 param);
-	void clear_ibusy(void *ptr, s32 param);
+	void set_buf_data(s32 param);
+	void set_buf_ack_in(s32 param);
+	void clear_ibusy(s32 param);
 
 	required_device<mcs48_cpu_device>   m_mcu;
 	std::unique_ptr<u8 []>              m_ram;
@@ -1039,7 +1039,7 @@ void a2bus_buf_grapplerplus_device::data_latched(u8 data)
 //  printer status inputs
 //--------------------------------------------------
 
-DECLARE_WRITE_LINE_MEMBER(a2bus_buf_grapplerplus_device::buf_ack_w)
+void a2bus_buf_grapplerplus_device::buf_ack_w(int state)
 {
 	machine().scheduler().synchronize(timer_expired_delegate(FUNC(a2bus_buf_grapplerplus_device::set_buf_ack_in), this), state ? 1 : 0);
 }
@@ -1177,13 +1177,13 @@ void a2bus_buf_grapplerplus_device::mcu_bus_w(u8 data)
 //  synchronised signals
 //--------------------------------------------------
 
-void a2bus_buf_grapplerplus_device::set_buf_data(void *ptr, s32 param)
+void a2bus_buf_grapplerplus_device::set_buf_data(s32 param)
 {
 	m_data_latch = u8(u32(param));
 }
 
 
-void a2bus_buf_grapplerplus_device::set_buf_ack_in(void *ptr, s32 param)
+void a2bus_buf_grapplerplus_device::set_buf_ack_in(s32 param)
 {
 	if (u32(param) != m_buf_ack_in)
 	{
@@ -1201,7 +1201,7 @@ void a2bus_buf_grapplerplus_device::set_buf_ack_in(void *ptr, s32 param)
 }
 
 
-void a2bus_buf_grapplerplus_device::clear_ibusy(void *ptr, s32 param)
+void a2bus_buf_grapplerplus_device::clear_ibusy(s32 param)
 {
 	if (m_ibusy)
 	{

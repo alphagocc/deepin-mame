@@ -50,9 +50,8 @@ protected:
 	ef9345_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, EF9345_MODE variant);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_config_memory_interface overrides
 	virtual space_config_vector memory_space_config() const override;
@@ -60,11 +59,14 @@ protected:
 	// address space configurations
 	const address_space_config      m_space_config;
 
-	// inline helper
+	// inline helpers
 	inline uint16_t indexram(uint8_t r);
 	inline uint16_t indexrom(uint8_t r);
 	inline void inc_x(uint8_t r);
 	inline void inc_y(uint8_t r);
+
+	TIMER_CALLBACK_MEMBER(clear_busy_flag);
+	TIMER_CALLBACK_MEMBER(blink_tick);
 
 private:
 	void set_busy_flag(int period);
@@ -86,12 +88,9 @@ private:
 	void makechar_12x80(uint16_t x, uint16_t y);
 	void ef9345_exec(uint8_t cmd);
 
-	void ef9345(address_map &map);
+	void ef9345(address_map &map) ATTR_COLD;
 
 	// internal state
-	static const device_timer_id BUSY_TIMER = 0;
-	static const device_timer_id BLINKING_TIMER = 1;
-
 	required_region_ptr<uint8_t> m_charset;
 	address_space *m_videoram;
 

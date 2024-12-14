@@ -1,7 +1,13 @@
 // license:BSD-3-Clause
 // copyright-holders:Olivier Galibert
+/*
+ * References:
+ * - PCI local bus (rev 2.x)
+ * - https://wiki.osdev.org/PCI
+ */
 #include "emu.h"
 #include "pci.h"
+#include "bus/pci/pci_slot.h"
 
 DEFINE_DEVICE_TYPE(PCI_ROOT,   pci_root_device,   "pci_root",   "PCI virtual root")
 DEFINE_DEVICE_TYPE(PCI_BRIDGE, pci_bridge_device, "pci_bridge", "PCI-PCI Bridge")
@@ -87,6 +93,12 @@ pci_device::pci_device(const machine_config &mconfig, device_type type, const ch
 	}
 }
 
+// main_id << 16 = vendor ID ($00-$01)
+// main_id & 0xffff = device ID ($02-$03)
+// revision = board versioning ($08)
+// pclass = programming interface/sub class code/base class code ($09-$0b)
+// subsystem_id << 16 = sub vendor ID ($2c-$2d)    - NB: not all cards have these
+// subsystem_id & 0xffff = sub device ID ($2e-$2f) /
 void pci_device::set_ids(uint32_t _main_id, uint8_t _revision, uint32_t _pclass, uint32_t _subsystem_id)
 {
 	main_id = _main_id;
@@ -97,7 +109,7 @@ void pci_device::set_ids(uint32_t _main_id, uint8_t _revision, uint32_t _pclass,
 
 void pci_device::device_start()
 {
-	command = 0x0080;
+	command = 0x0000;
 	command_mask = 0x01bf;
 	status = 0x0000;
 
@@ -110,6 +122,14 @@ void pci_device::device_start()
 	save_item(NAME(status));
 	save_item(NAME(intr_line));
 	save_item(NAME(intr_pin));
+
+	device_t *root = owner();
+	while(root && root->type() != PCI_ROOT)
+		root = root->owner();
+	if(!root)
+		fatalerror("PCI device %s is without a PCI root\n", tag());
+
+	m_pci_root = downcast<pci_root_device *>(root);
 }
 
 void pci_device::device_reset()
@@ -257,6 +277,17 @@ void pci_device::expansion_base_w(offs_t offset, uint32_t data, uint32_t mem_mas
 	remap_cb();
 }
 
+// if non-zero a CAPability PoinTeR marks an offset in PCI config space where a standard extension is located
+// For example if capptr_r is 0xc0 then [offset+0xc0] has a capability identifier that is set with:
+// bits 31-16 <capability dependant, usually revision and supported sub-features>
+// bits 15-8 next capptr offset, 0x00 to determine the given item as last
+// bits 7-0 capability ID:
+// - 0x01 PMI Power Management Interface
+// - 0x02 AGP Accelerated Graphics Port
+// - 0x03 VPD Vital Product Data
+// - 0x04 Slot Identification
+// - 0x05 MSI Message Signaled Interrupts
+// - 0x06 CompactPCI Hot Swap
 uint8_t pci_device::capptr_r()
 {
 	return 0x00;
@@ -487,13 +518,25 @@ void pci_bridge_device::device_start()
 
 	for (device_t &d : bus_root()->subdevices())
 	{
-		const char *t = d.tag();
-		int l = strlen(t);
-		if(l <= 4 || t[l-5] != ':' || t[l-2] != '.')
-			continue;
-		int id = strtol(t+l-4, nullptr, 16);
-		int fct = t[l-1] - '0';
-		sub_devices[(id << 3) | fct] = downcast<pci_device *>(&d);
+		if(d.type() == PCI_SLOT) {
+			pci_slot_device &slot = downcast<pci_slot_device &>(d);
+			pci_device *card = slot.get_card();
+			if(card) {
+				int id = slot.get_slot();
+				sub_devices[id << 3] = card;
+			}
+
+		} else {
+			const char *t = d.tag();
+			int l = strlen(t);
+			if(l <= 4 || t[l-5] != ':' || t[l-2] != '.') {
+				logerror("Device %s unhandled\n", t);
+				continue;
+			}
+			int id = strtol(t+l-4, nullptr, 16);
+			int fct = t[l-1] - '0';
+			sub_devices[(id << 3) | fct] = downcast<pci_device *>(&d);
+		}
 	}
 
 	mapper_cb cf_cb(&pci_bridge_device::regenerate_config_mapping, this);
@@ -522,6 +565,10 @@ void pci_bridge_device::device_reset()
 	primary_bus = 0x00;
 	secondary_bus = 0x00;
 	subordinate_bus = 0x00;
+}
+
+void pci_bridge_device::interface_post_reset()
+{
 	regenerate_config_mapping();
 }
 
@@ -841,6 +888,12 @@ void pci_host_device::io_configuration_access_map(address_map &map)
 	map(0xcfc, 0xcff).rw(FUNC(pci_host_device::config_data_r), FUNC(pci_host_device::config_data_w));
 }
 
+void pci_host_device::set_spaces(address_space *memory, address_space *io, address_space *busmaster)
+{
+	memory_space = memory;
+	io_space = io ? io : memory;
+	m_pci_root->set_pci_busmaster_space(busmaster ? busmaster : memory);
+}
 
 pci_host_device::pci_host_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock)
 	: pci_bridge_device(mconfig, type, tag, owner, clock)
@@ -871,9 +924,14 @@ void pci_host_device::device_reset()
 {
 	pci_bridge_device::device_reset();
 	reset_all_mappings();
-	regenerate_mapping();
 
 	config_address = 0;
+}
+
+void pci_host_device::interface_post_reset()
+{
+	pci_bridge_device::interface_post_reset();
+	regenerate_mapping();
 }
 
 void pci_host_device::regenerate_mapping()
@@ -907,6 +965,38 @@ void pci_host_device::config_data_w(offs_t offset, uint32_t data, uint32_t mem_m
 		root_config_write((config_address >> 16) & 0xff, (config_address >> 8) & 0xff, config_address & 0xfc, data, mem_mask);
 }
 
+uint32_t pci_host_device::config_data_ex_r(offs_t offset, uint32_t mem_mask)
+{
+	// is this a Type 0 or Type 1 configuration address? (page 31, PCI 2.2 Specification)
+	if ((config_address & 3) == 0)
+	{
+		const int devnum = 31 - count_leading_zeros_32(config_address & 0xfffff800);
+		return root_config_read(0, devnum << 3, config_address & 0xfc, mem_mask);
+	}
+	else if ((config_address & 3) == 1)
+		return config_address & 0x80000000 ? root_config_read((config_address >> 16) & 0xff, (config_address >> 8) & 0xff, config_address & 0xfc, mem_mask) : 0xffffffff;
+
+	logerror("pci: configuration address format %d unsupported", config_address & 3);
+	return 0xffffffff;
+}
+
+void pci_host_device::config_data_ex_w(offs_t offset, uint32_t data, uint32_t mem_mask)
+{
+	// is this a Type 0 or Type 1 configuration address? (page 31, PCI 2.2 Specification)
+	if ((config_address & 3) == 0)
+	{
+		const int devnum = 31 - count_leading_zeros_32(config_address & 0xfffff800);
+		root_config_write(0, devnum << 3, config_address & 0xfc, data, mem_mask);
+	}
+	else if ((config_address & 3) == 1)
+	{
+		if (config_address & 0x80000000)
+			root_config_write((config_address >> 16) & 0xff, (config_address >> 8) & 0xff, config_address & 0xfc, data, mem_mask);
+	}
+	else
+		logerror("pci: configuration address format %d unsupported", config_address & 3);
+}
+
 uint32_t pci_host_device::root_config_read(uint8_t bus, uint8_t device, uint16_t reg, uint32_t mem_mask)
 {
 	if(bus == 0x00)
@@ -926,7 +1016,10 @@ void pci_host_device::root_config_write(uint8_t bus, uint8_t device, uint16_t re
 
 
 pci_root_device::pci_root_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
-	: device_t(mconfig, PCI_ROOT, tag, owner, clock)
+	: device_t(mconfig, PCI_ROOT, tag, owner, clock),
+	  m_pin_mapper(*this),
+	  m_irq_handler(*this),
+	  m_pci_busmaster_space(nullptr)
 {
 }
 
@@ -936,4 +1029,14 @@ void pci_root_device::device_start()
 
 void pci_root_device::device_reset()
 {
+}
+
+void pci_root_device::irq_pin_w(int pin, int state)
+{
+	m_irq_handler(m_pin_mapper(pin), state);
+}
+
+void pci_root_device::irq_w(int line, int state)
+{
+	m_irq_handler(line, state);
 }

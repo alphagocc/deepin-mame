@@ -7,7 +7,9 @@
 #pragma once
 
 #include "arm7.h"
-#include "arm7core.h"
+
+#include "machine/vic_pl192.h"
+
 
 /***************************************************************************
     DEVICE CONFIGURATION MACROS
@@ -37,10 +39,6 @@ public:
 	void write_timer(int timer, int offset, uint32_t data, uint32_t mem_mask);
 	uint32_t read_timer(int timer, int offset, uint32_t mem_mask);
 
-	// VIC
-	uint32_t vic_r(offs_t offset, uint32_t mem_mask = ~0);
-	void vic_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
-
 	// PIN select block
 	uint32_t pin_r(offs_t offset, uint32_t mem_mask = ~0);
 	void pin_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
@@ -68,12 +66,12 @@ public:
 	// todo, use an appropriate flash type instead
 	uint8_t m_flash[0x8000]; // needs to be public because the harmony/melody device injects contents with memcpy, yuck
 
-	void lpc2103_map(address_map &map);
+	void lpc2103_map(address_map &map) ATTR_COLD;
 protected:
 	// device-level overrides
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	virtual space_config_vector memory_space_config() const override;
 
@@ -81,6 +79,8 @@ protected:
 
 private:
 	address_space_config m_program_config;
+
+	required_device<vic_pl190_device> m_vic;
 };
 
 

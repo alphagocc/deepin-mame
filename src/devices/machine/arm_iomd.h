@@ -12,7 +12,6 @@
 #pragma once
 
 #include "cpu/arm7/arm7.h"
-#include "cpu/arm7/arm7core.h"
 #include "machine/acorn_vidc.h"
 #include "machine/at_keybc.h"
 #include "bus/pc_kbd/pc_kbdc.h"
@@ -42,16 +41,16 @@ public:
 	auto iocr_read_id() { return m_iocr_read_id_cb.bind(); }
 	auto iocr_write_id() { return m_iocr_write_id_cb.bind(); }
 	// IRQA
-	DECLARE_WRITE_LINE_MEMBER( vblank_irq );
+	void vblank_irq(int state);
 	// IRQB
-	DECLARE_WRITE_LINE_MEMBER( keyboard_irq );
+	void keyboard_irq(int state);
 	// DRQs
-	DECLARE_WRITE_LINE_MEMBER( sound_drq );
+	void sound_drq(int state);
 	// Reset
-	DECLARE_WRITE_LINE_MEMBER( keyboard_reset );
+	void keyboard_reset(int state);
 
 	// I/O operations
-	virtual void map(address_map &map);
+	virtual void map(address_map &map) ATTR_COLD;
 	template<class T> void set_host_cpu_tag(T &&tag) { m_host_cpu.set_tag(std::forward<T>(tag)); }
 	template<class T> void set_vidc_tag(T &&tag) { m_vidc.set_tag(std::forward<T>(tag)); }
 	template<class T> void set_kbdc_tag(T &&tag) { m_kbdc.set_tag(std::forward<T>(tag)); }
@@ -59,12 +58,13 @@ public:
 protected:
 	// device-level overrides
 	//virtual void device_validity_check(validity_checker &valid) const override;
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
-	void base_map(address_map &map);
+	TIMER_CALLBACK_MEMBER(timer_elapsed);
+
+	void base_map(address_map &map) ATTR_COLD;
 	u16 m_id;
 	u8 m_version;
 
@@ -117,14 +117,15 @@ private:
 	u32 cursinit_r();
 	void cursinit_w(offs_t offset, u32 data, u32 mem_mask = ~0);
 
-	static constexpr int sounddma_ch_size = 2;
-	u32 m_sndcur, m_sndend;
-	u32 m_sndcur_reg[sounddma_ch_size], m_sndend_reg[sounddma_ch_size];
-	bool m_sndstop_reg[sounddma_ch_size], m_sndlast_reg[sounddma_ch_size];
-	bool m_sndbuffer_ok[sounddma_ch_size];
+	u32 m_sndcur;
+	u32 m_sndend;
+	u32 m_sndcur_reg[2];
+	u32 m_sndend_reg[2];
+	bool m_sndstop_reg[2];
+	bool m_sndlast_reg[2];
+	bool m_sndbuffer_ok[2];
 	bool m_sound_dma_on;
 	u8 m_sndcur_buffer;
-	bool m_snd_overrun, m_snd_int;
 	inline void sounddma_swap_buffer();
 	template <unsigned Which> u32 sdcur_r();
 	template <unsigned Which> void sdcur_w(offs_t offset, u32 data, u32 mem_mask = ~0);
@@ -139,11 +140,6 @@ private:
 	inline void flush_irq(unsigned Which);
 	template <unsigned Which> inline void trigger_irq(u8 irq_type);
 
-	static constexpr int timer_ch_size = 2;
-	enum {
-		T0_TIMER = 1,
-		T1_TIMER
-	};
 	inline void trigger_timer(unsigned Which);
 	u16 m_timer_in[2];
 	u16 m_timer_out[2];
@@ -172,14 +168,14 @@ public:
 	// construction/destruction
 	arm7500fe_iomd_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
-	virtual void map(address_map &map) override;
+	virtual void map(address_map &map) override ATTR_COLD;
 	auto iolines_read() { return m_iolines_read_cb.bind(); }
 	auto iolines_write() { return m_iolines_write_cb.bind(); }
 
 protected:
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 private:
 	devcb_read8 m_iolines_read_cb;
 	devcb_write8 m_iolines_write_cb;

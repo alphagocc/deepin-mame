@@ -33,12 +33,13 @@ gcm394_base_video_device::gcm394_base_video_device(const machine_config &mconfig
 	m_video_irq_cb(*this),
 	m_palette(*this, "palette"),
 	m_gfxdecode(*this, "gfxdecode"),
-	m_space_read_cb(*this),
+	m_space_read_cb(*this, 0),
 	m_rowscroll(*this, "^rowscroll"),
 	m_rowzoom(*this, "^rowzoom"),
 	m_alt_extrasprite_hack(0),
 	m_alt_tile_addressing(0),
 	m_use_legacy_mode(false),
+	m_disallow_resolution_control(false),
 	m_renderer(*this, "renderer")
 {
 }
@@ -200,17 +201,13 @@ void gcm394_base_video_device::decodegfx(const char* tag)
 
 void gcm394_base_video_device::device_start()
 {
-	m_video_irq_cb.resolve();
-
 	m_maxgfxelement = 0;
 
 	// debug helper only
 	if (memregion(":maincpu"))
 		decodegfx(":maincpu");
 
-	m_space_read_cb.resolve_safe(0);
-
-	m_screenpos_timer = timer_alloc(TIMER_SCREENPOS);
+	m_screenpos_timer = timer_alloc(FUNC(gcm394_base_video_device::screen_pos_reached), this);
 	m_screenpos_timer->adjust(attotime::never);
 
 	save_item(NAME(m_page0_addr_lsb));
@@ -383,16 +380,19 @@ uint32_t gcm394_base_video_device::screen_update(screen_device &screen, bitmap_r
 
 	//const uint16_t bgcol = 0x7c1f; // magenta
 //  const uint16_t bgcol = 0x0000; // black
-	bool highres;
-	if (m_707f & 0x0010)
+	bool highres = false;
+	if (!m_disallow_resolution_control)
 	{
-		highres = true;
-		m_screen->set_visible_area(0, 640-1, 0, 480-1);
-	}
-	else
-	{
-		highres = false;
-		m_screen->set_visible_area(0, 320-1, 0, 240-1);
+		if (m_707f & 0x0010)
+		{
+			highres = true;
+			m_screen->set_visible_area(0, 640 - 1, 0, 480 - 1);
+		}
+		else
+		{
+			highres = false;
+			m_screen->set_visible_area(0, 320 - 1, 0, 240 - 1);
+		}
 	}
 
 	address_space &mem = m_cpu->space(AS_PROGRAM);
@@ -1112,7 +1112,7 @@ void gcm394_base_video_device::check_video_irq()
 	m_video_irq_cb((m_video_irq_status & m_video_irq_enable) ? ASSERT_LINE : CLEAR_LINE);
 }
 
-WRITE_LINE_MEMBER(gcm394_base_video_device::vblank)
+void gcm394_base_video_device::vblank(int state)
 {
 	if (!state)
 	{
@@ -1132,27 +1132,20 @@ WRITE_LINE_MEMBER(gcm394_base_video_device::vblank)
 	}
 }
 
-void gcm394_base_video_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(gcm394_base_video_device::screen_pos_reached)
 {
-	switch (id)
+	if (m_video_irq_enable & 2)
 	{
-		case TIMER_SCREENPOS:
-		{
-			if (m_video_irq_enable & 2)
-			{
-				m_video_irq_status |= 2;
-				check_video_irq();
-			}
-
-			//printf("firing irq timer\n");
-
-			m_screen->update_partial(m_screen->vpos());
-
-			// fire again, jak_dbz pinball needs this
-			m_screenpos_timer->adjust(m_screen->time_until_pos(m_yirqpos-19, m_xirqpos));
-			break;
-		}
+		m_video_irq_status |= 2;
+		check_video_irq();
 	}
+
+	//printf("firing irq timer\n");
+
+	m_screen->update_partial(m_screen->vpos());
+
+	// fire again, jak_dbz pinball needs this
+	m_screenpos_timer->adjust(m_screen->time_until_pos(m_yirqpos-19, m_xirqpos));
 }
 
 

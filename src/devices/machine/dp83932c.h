@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "dinetwork.h"
+
 class dp83932c_device
 	: public device_t
 	, public device_network_interface
@@ -18,14 +20,14 @@ public:
 	auto out_int_cb() { return m_out_int.bind(); }
 
 	// external interface
-	void map(address_map &map);
+	void map(address_map &map) ATTR_COLD;
 	u16 reg_r(offs_t offset) { return m_reg[offset]; }
 	void reg_w(offs_t offset, u16 data);
 
 protected:
 	// device_t overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_network_interface overrides
 	virtual void send_complete_cb(int result) override;
@@ -33,7 +35,7 @@ protected:
 	virtual void recv_complete_cb(int result) override;
 
 	// command helpers
-	void command(void *ptr, s32 param);
+	void command(s32 param);
 	void transmit();
 	void read_rra(bool command = false);
 	void load_cam();
@@ -207,6 +209,10 @@ private:
 	bool m_int_state;
 	u16 m_reg[64];
 	u64 m_cam[16];
+
+	// These wrappers handle 16-bit data stored on 32-bit word boundaries when in 32-bit mode
+	u16 read_bus_word(offs_t address);
+	void write_bus_word(offs_t address, u16 data);
 };
 
 DECLARE_DEVICE_TYPE(DP83932C, dp83932c_device)

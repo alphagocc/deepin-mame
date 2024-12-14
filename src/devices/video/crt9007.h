@@ -71,31 +71,29 @@ public:
 	void ack_w(int state);
 	void lpstb_w(int state);
 
+	// cursor location
+	bool cursor_active(unsigned x, unsigned y);
+
 protected:
-	// device-level overrides
-	virtual void device_resolve_objects() override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	// device_t implementation
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_post_load() override;
 	virtual void device_clock_changed() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
 
-	// device_memory_interface overrides
+	// device_memory_interface implementation
 	virtual space_config_vector memory_space_config() const override;
 
-private:
-	enum
-	{
-		TIMER_HSYNC,
-		TIMER_VSYNC,
-		TIMER_VLT,
-		TIMER_CURS,
-		TIMER_DRB,
-		TIMER_DMA,
-		TIMER_FRAME
-	};
+	TIMER_CALLBACK_MEMBER(hsync_update);
+	TIMER_CALLBACK_MEMBER(vsync_update);
+	TIMER_CALLBACK_MEMBER(vlt_update);
+	TIMER_CALLBACK_MEMBER(cursor_update);
+	TIMER_CALLBACK_MEMBER(drb_update);
+	TIMER_CALLBACK_MEMBER(dma_update);
+	TIMER_CALLBACK_MEMBER(frame_update);
 
-	void crt9007(address_map &map);
+private:
+	void crt9007(address_map &map) ATTR_COLD;
 
 	inline uint8_t readbyte(offs_t address);
 

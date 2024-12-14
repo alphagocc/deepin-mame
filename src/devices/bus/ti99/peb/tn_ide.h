@@ -37,8 +37,8 @@ public:
 	DECLARE_INPUT_CHANGED_MEMBER( mode_changed );
 
 private:
-	void device_start() override;
-	void device_reset() override;
+	void device_start() override ATTR_COLD;
+	void device_reset() override ATTR_COLD;
 	void device_add_mconfig(machine_config &config) override;
 	ioport_constructor device_input_ports() const override;
 
@@ -71,11 +71,13 @@ private:
 	// Genmod decoding. If not used, the AME line is pulled up, and the AMD line is pulled down
 	bool m_genmod;
 
-	DECLARE_WRITE_LINE_MEMBER(clock_interrupt_callback);
-	DECLARE_WRITE_LINE_MEMBER(ide_interrupt_callback);
-	DECLARE_WRITE_LINE_MEMBER(resetdr_callback);
+	template<int rtctype> void rtc_int_callback(int state);
+	void ide_interrupt_callback(int state);
+	void resetdr_callback(int state);
 
 	void decode(offs_t offset, bool& mmap, bool& sramsel, bool& xramsel, bool& rtcsel, bool& cs1fx, bool& cs3fx);
+
+	int m_rtc_int;
 };
 
 } // end namespace bus::ti99::peb

@@ -7,21 +7,19 @@
 
 #pragma once
 
+#include "machine/z80daisy.h"
+
 
 enum
 {
 	T11_R0=1, T11_R1, T11_R2, T11_R3, T11_R4, T11_R5, T11_SP, T11_PC, T11_PSW
 };
 
-#define T11_IRQ0        0      /* IRQ0 */
-#define T11_IRQ1        1      /* IRQ1 */
-#define T11_IRQ2        2      /* IRQ2 */
-#define T11_IRQ3        3      /* IRQ3 */
-
 
 class t11_device :  public cpu_device
 {
 public:
+	// T11 input lines
 	enum
 	{
 		CP0_LINE = 0,           // -AI4 (at PI time)
@@ -33,8 +31,12 @@ public:
 		HLT_LINE = 6            // -AI7 (at PI time)
 	};
 
+	// generic hardware traps
+	static constexpr uint8_t POWER_FAIL = PF_LINE;
+	static constexpr uint8_t BUS_ERROR = 8;
+
 	// construction/destruction
-	t11_device(const machine_config &mconfig, const char *_tag, device_t *_owner, uint32_t _clock);
+	t11_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 	// configuration helpers
 	void set_initial_mode(const uint16_t mode) { c_initial_mode = mode; }
@@ -51,20 +53,49 @@ protected:
 		T11_IOT         = 020,  // IOT instruction vector
 		T11_PWRFAIL     = 024,  // Power fail vector
 		T11_EMT         = 030,  // EMT instruction vector
-		T11_TRAP        = 034   // TRAP instruction vector
+		T11_TRAP        = 034,  // TRAP instruction vector
+		// K1801 vectors
+		VM1_EVNT        = 0100, // EVNT pin vector
+		VM1_IRQ3        = 0270, // IRQ3 pin vector
+		VM1_HALT        = 0160002, // HALT instruction vector
+		VM2_HALT        = 0170  // HALT instruction vector
+	};
+	// K1801 microcode constants
+	enum
+	{
+		VM1_STACK       = 0177674,  // start of HALT mode save area
+		VM1_SEL1        = 0177716,  // DIP switch register (read) and HALT mode selector (write)
+		SEL1_HALT       = 010,
+		MCIR_ILL        = -2,
+		MCIR_SET        = -1,
+		MCIR_WAIT       = 0,
+		MCIR_NONE       = 1,
+		MCIR_HALT       = 2,
+		MCIR_IRQ        = 3
+	};
+	enum
+	{
+		// DEC command set extensions
+		IS_LEIS     = 1 << 0,   // MARK, RTT, SOB, SXT, XOR
+		IS_EIS      = 1 << 1,   // same plus ASH, ASHC, MUL, DIV
+		IS_MFPT     = 1 << 2,   // MFPT
+		IS_MXPS     = 1 << 3,   // MFPS, MTPS
+		IS_T11      = 1 << 4,   // LEIS without MARK
+		// K1801 command set extensions
+		IS_VM1      = 1 << 5,   // START, STEP
+		IS_VM2      = 1 << 6,   // same plus RSEL, MxUS, RCPx, WCPx
 	};
 
 	t11_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 12; }
 	virtual uint32_t execute_max_cycles() const noexcept override { return 114; }
-	virtual uint32_t execute_input_lines() const noexcept override { return 7; }
-	virtual bool execute_input_edge_triggered(int inputnum) const noexcept override { return inputnum == PF_LINE || inputnum == HLT_LINE; }
+	virtual bool execute_input_edge_triggered(int inputnum) const noexcept override { return inputnum == PF_LINE || inputnum == HLT_LINE || inputnum == BUS_ERROR; }
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
 
@@ -80,18 +111,25 @@ protected:
 	address_space_config m_program_config;
 
 	uint16_t c_initial_mode;
+	uint16_t c_insn_set;
 
 	PAIR                m_ppc;    /* previous program counter */
 	PAIR                m_reg[8];
 	PAIR                m_psw;
 	uint16_t            m_initial_pc;
 	uint8_t             m_wait_state;
+	int8_t              m_mcir;
+	uint16_t            m_vsel;
 	uint8_t             m_cp_state;
 	bool                m_vec_active;
 	bool                m_pf_active;
+	bool                m_berr_active;
 	bool                m_hlt_active;
 	bool                m_power_fail;
+	bool                m_bus_error;
 	bool                m_ext_halt;
+	bool                m_check_irqs;
+	bool                m_trace_trap;
 	int                 m_icount;
 	memory_access<16, 1, 0, ENDIANNESS_LITTLE>::cache m_cache;
 	memory_access<16, 1, 0, ENDIANNESS_LITTLE>::specific m_program;
@@ -106,15 +144,19 @@ protected:
 	inline void WWORD(int addr, int data);
 	inline void PUSH(int val);
 	inline int POP();
-	void t11_check_irqs();
+
+	virtual void t11_check_irqs();
 	void take_interrupt(uint8_t vector);
+	void trap_to(uint16_t vector);
 
 	typedef void ( t11_device::*opcode_func )(uint16_t op);
 	static const opcode_func s_opcode_table[65536 >> 3];
 
 	void op_0000(uint16_t op);
+	void op_0001(uint16_t op);
 	void halt(uint16_t op);
 	void illegal(uint16_t op);
+	void illegal4(uint16_t op);
 	void jmp_rgd(uint16_t op);
 	void jmp_in(uint16_t op);
 	void jmp_ind(uint16_t op);
@@ -1153,7 +1195,25 @@ protected:
 	void sub_ixd_ixd(uint16_t op);
 };
 
-class k1801vm2_device : public t11_device
+class k1801vm1_device : public t11_device, public z80_daisy_chain_interface
+{
+public:
+	// construction/destruction
+	k1801vm1_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
+
+protected:
+	// device-level overrides
+	virtual void device_reset() override ATTR_COLD;
+
+	// device_state_interface overrides
+	virtual void state_string_export(const device_state_entry &entry, std::string &str) const override;
+
+	virtual void t11_check_irqs() override;
+	void take_interrupt_halt(uint16_t vector);
+};
+
+
+class k1801vm2_device : public t11_device, public z80_daisy_chain_interface
 {
 public:
 	// construction/destruction
@@ -1161,7 +1221,7 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_reset() override;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_state_interface overrides
 	virtual void state_string_export(const device_state_entry &entry, std::string &str) const override;
@@ -1169,6 +1229,7 @@ protected:
 
 
 DECLARE_DEVICE_TYPE(T11,      t11_device)
+DECLARE_DEVICE_TYPE(K1801VM1, k1801vm1_device)
 DECLARE_DEVICE_TYPE(K1801VM2, k1801vm2_device)
 
 #endif // MAME_CPU_T11_T11_H

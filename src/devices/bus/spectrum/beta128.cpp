@@ -21,6 +21,8 @@
 #include "emu.h"
 #include "beta128.h"
 
+#include "formats/trd_dsk.h"
+
 
 /***************************************************************************
     DEVICE DEFINITIONS
@@ -35,10 +37,10 @@ DEFINE_DEVICE_TYPE(SPECTRUM_BETA128, spectrum_beta128_device, "spectrum_beta128"
 
 INPUT_PORTS_START(beta128)
 	PORT_START("BUTTON") // don't use F12, it clashes with the 'exit from debugger' button
-	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_BUTTON1) PORT_NAME("Magic Button") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHANGED_MEMBER(DEVICE_SELF, spectrum_beta128_device, magic_button, 0)
+	PORT_BIT(0x01, IP_ACTIVE_LOW, IPT_BUTTON1) PORT_NAME("Magic Button") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(spectrum_beta128_device::magic_button), 0)
 
 	PORT_START("SWITCH")
-	PORT_CONFNAME(0x03, 0x01, "System Switch") //PORT_CHANGED_MEMBER(DEVICE_SELF, spectrum_beta128_device, switch_changed, 0)
+	PORT_CONFNAME(0x03, 0x01, "System Switch") //PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(spectrum_beta128_device::switch_changed), 0)
 	PORT_CONFSETTING(0x00, "Off (128)")
 	PORT_CONFSETTING(0x01, "Normal (auto-boot)") // also enable Beta-disk V3/V4 compatibility, auto-boot feature does not work on Spectrum128.
 	//PORT_CONFSETTING(0x02, "Reset") // TODO: implement RESET callback
@@ -63,7 +65,7 @@ static void beta_floppies(device_slot_interface &device)
 }
 
 //-------------------------------------------------
-//  floppy_format_type floppy_formats
+//  floppy_formats
 //-------------------------------------------------
 
 void spectrum_beta128_device::floppy_formats(format_registration &fr)
@@ -114,6 +116,7 @@ void spectrum_beta128_device::device_add_mconfig(machine_config &config)
 	SPECTRUM_EXPANSION_SLOT(config, m_exp, spectrum_expansion_devices, nullptr);
 	m_exp->irq_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::irq_w));
 	m_exp->nmi_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::nmi_w));
+	m_exp->fb_r_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::fb_r));
 }
 
 const tiny_rom_entry *spectrum_beta128_device::device_rom_region() const
@@ -174,9 +177,9 @@ void spectrum_beta128_device::device_reset()
 //  IMPLEMENTATION
 //**************************************************************************
 
-READ_LINE_MEMBER(spectrum_beta128_device::romcs)
+bool spectrum_beta128_device::romcs()
 {
-	return m_romcs | m_exp->romcs();
+	return m_romcs || m_exp->romcs();
 }
 
 

@@ -6,6 +6,7 @@
 #pragma once
 
 #include "nxrom.h"
+#include "sound/samples.h"
 
 
 // ======================> nes_bandai_pt554_device
@@ -14,13 +15,13 @@ class nes_bandai_pt554_device : public nes_cnrom_device
 {
 public:
 	// construction/destruction
-	nes_bandai_pt554_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
+	nes_bandai_pt554_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock);
 
-	virtual void write_m(offs_t offset, uint8_t data) override;
+	virtual void write_m(offs_t offset, u8 data) override;
 
 protected:
 	// device-level overrides
-	virtual void device_add_mconfig(machine_config &config) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
 
 private:
 	required_device<samples_device> m_samples;

@@ -16,37 +16,32 @@ interface and paper tape reader as a single device.
 #include "emu.h"
 #include "tapereader.h"
 
+#include "imagedev/papertape.h"
+
 
 namespace {
 
 class imm4_90_device
-		: public device_t
+		: public paper_tape_reader_device
 		, public bus::intellec4::device_univ_card_interface
-		, public device_image_interface
 {
 public:
 	imm4_90_device(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
 
-	virtual image_init_result call_load() override;
+	virtual std::pair<std::error_condition, std::string> call_load() override;
 	virtual void call_unload() override;
 
-	virtual iodevice_t  image_type()       const noexcept override { return IO_PUNCHTAPE; }
-	virtual bool        is_readable()      const noexcept override { return true; }
-	virtual bool        is_writeable()     const noexcept override { return false; }
-	virtual bool        is_creatable()     const noexcept override { return false; }
-	virtual bool        must_be_loaded()   const noexcept override { return false; }
-	virtual bool        is_reset_on_load() const noexcept override { return false; }
-	virtual char const *file_extensions()  const noexcept override { return "bnpf,hex,lst,txt"; }
+	virtual char const *file_extensions() const noexcept override { return "bnpf,hex,lst,txt"; }
 
 protected:
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 private:
 	u8 rom4_in() { return m_ready ? 0x07U : 0x0fU; }
 	u8 rom6_in() { return ~m_data & 0x0fU; }
 	u8 rom7_in() { return (~m_data >> 4) & 0x0fU; }
 	void rom4_out(u8 data) { advance(BIT(data, 3)); }
-	DECLARE_WRITE_LINE_MEMBER(advance);
+	void advance(int state);
 	TIMER_CALLBACK_MEMBER(step);
 
 	emu_timer   *m_step_timer;
@@ -59,9 +54,8 @@ private:
 
 
 imm4_90_device::imm4_90_device(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock)
-	: device_t(mconfig, INTELLEC4_TAPE_READER, tag, owner, clock)
+	: paper_tape_reader_device(mconfig, INTELLEC4_TAPE_READER, tag, owner, clock)
 	, bus::intellec4::device_univ_card_interface(mconfig, *this)
-	, device_image_interface(mconfig, *this)
 	, m_step_timer(nullptr)
 	, m_data(0xffU)
 	, m_ready(false)
@@ -71,13 +65,13 @@ imm4_90_device::imm4_90_device(machine_config const &mconfig, char const *tag, d
 }
 
 
-image_init_result imm4_90_device::call_load()
+std::pair<std::error_condition, std::string> imm4_90_device::call_load()
 {
 	m_step_timer->reset();
 	m_data = 0x00U;
 	m_ready = false;
 	m_stepping = false;
-	return image_init_result::PASS;
+	return std::make_pair(std::error_condition(), std::string());
 }
 
 void imm4_90_device::call_unload()
@@ -91,7 +85,7 @@ void imm4_90_device::call_unload()
 
 void imm4_90_device::device_start()
 {
-	m_step_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(imm4_90_device::step), this));
+	m_step_timer = timer_alloc(FUNC(imm4_90_device::step), this);
 
 	save_item(NAME(m_data));
 	save_item(NAME(m_ready));
@@ -105,7 +99,7 @@ void imm4_90_device::device_start()
 }
 
 
-DECLARE_WRITE_LINE_MEMBER(imm4_90_device::advance)
+void imm4_90_device::advance(int state)
 {
 	// this is edge-sensitive - CPU sends the narrowest pulse it can
 	if (!m_advance && !bool(state) && !m_stepping)

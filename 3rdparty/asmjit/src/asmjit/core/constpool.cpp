@@ -1,25 +1,7 @@
-// AsmJit - Machine code generation for C++
+// This file is part of AsmJit project <https://asmjit.com>
 //
-//  * Official AsmJit Home Page: https://asmjit.com
-//  * Official Github Repository: https://github.com/asmjit/asmjit
-//
-// Copyright (c) 2008-2020 The AsmJit Authors
-//
-// This software is provided 'as-is', without any express or implied
-// warranty. In no event will the authors be held liable for any damages
-// arising from the use of this software.
-//
-// Permission is granted to anyone to use this software for any purpose,
-// including commercial applications, and to alter it and redistribute it
-// freely, subject to the following restrictions:
-//
-// 1. The origin of this software must not be misrepresented; you must not
-//    claim that you wrote the original software. If you use this software
-//    in a product, an acknowledgment in the product documentation would be
-//    appreciated but is not required.
-// 2. Altered source versions must be plainly marked as such, and must not be
-//    misrepresented as being the original software.
-// 3. This notice may not be removed or altered from any source distribution.
+// See asmjit.h or LICENSE.md for license and copyright information
+// SPDX-License-Identifier: Zlib
 
 #include "../core/api-build_p.h"
 #include "../core/constpool.h"
@@ -27,16 +9,14 @@
 
 ASMJIT_BEGIN_NAMESPACE
 
-// ============================================================================
-// [asmjit::ConstPool - Construction / Destruction]
-// ============================================================================
+// ConstPool - Construction & Destruction
+// ======================================
 
 ConstPool::ConstPool(Zone* zone) noexcept { reset(zone); }
 ConstPool::~ConstPool() noexcept {}
 
-// ============================================================================
-// [asmjit::ConstPool - Reset]
-// ============================================================================
+// ConstPool - Reset
+// =================
 
 void ConstPool::reset(Zone* zone) noexcept {
   _zone = zone;
@@ -52,13 +32,13 @@ void ConstPool::reset(Zone* zone) noexcept {
   _gapPool = nullptr;
   _size = 0;
   _alignment = 0;
+  _minItemSize = 0;
 }
 
-// ============================================================================
-// [asmjit::ConstPool - Ops]
-// ============================================================================
+// ConstPool - Operations
+// ======================
 
-static ASMJIT_INLINE ConstPool::Gap* ConstPool_allocGap(ConstPool* self) noexcept {
+static inline ConstPool::Gap* ConstPool_allocGap(ConstPool* self) noexcept {
   ConstPool::Gap* gap = self->_gapPool;
   if (!gap)
     return self->_zone->allocT<ConstPool::Gap>();
@@ -67,7 +47,7 @@ static ASMJIT_INLINE ConstPool::Gap* ConstPool_allocGap(ConstPool* self) noexcep
   return gap;
 }
 
-static ASMJIT_INLINE void ConstPool_freeGap(ConstPool* self, ConstPool::Gap* gap) noexcept {
+static inline void ConstPool_freeGap(ConstPool* self, ConstPool::Gap* gap) noexcept {
   gap->_next = self->_gapPool;
   self->_gapPool = gap;
 }
@@ -79,7 +59,11 @@ static void ConstPool_addGap(ConstPool* self, size_t offset, size_t size) noexce
     size_t gapIndex;
     size_t gapSize;
 
-    if (size >= 16 && Support::isAligned<size_t>(offset, 16)) {
+    if (size >= 32 && Support::isAligned<size_t>(offset, 32)) {
+      gapIndex = ConstPool::kIndex32;
+      gapSize = 32;
+    }
+    else if (size >= 16 && Support::isAligned<size_t>(offset, 16)) {
       gapIndex = ConstPool::kIndex16;
       gapSize = 16;
     }
@@ -100,9 +84,8 @@ static void ConstPool_addGap(ConstPool* self, size_t offset, size_t size) noexce
       gapSize = 1;
     }
 
-    // We don't have to check for errors here, if this failed nothing really
-    // happened (just the gap won't be visible) and it will fail again at
-    // place where the same check would generate `kErrorOutOfMemory` error.
+    // We don't have to check for errors here, if this failed nothing really happened (just the gap won't be
+    // visible) and it will fail again at place where the same check would generate `kErrorOutOfMemory` error.
     ConstPool::Gap* gap = ConstPool_allocGap(self);
     if (!gap)
       return;
@@ -121,7 +104,9 @@ static void ConstPool_addGap(ConstPool* self, size_t offset, size_t size) noexce
 Error ConstPool::add(const void* data, size_t size, size_t& dstOffset) noexcept {
   size_t treeIndex;
 
-  if (size == 32)
+  if (size == 64)
+    treeIndex = kIndex64;
+  else if (size == 32)
     treeIndex = kIndex32;
   else if (size == 16)
     treeIndex = kIndex16;
@@ -142,8 +127,7 @@ Error ConstPool::add(const void* data, size_t size, size_t& dstOffset) noexcept 
     return kErrorOk;
   }
 
-  // Before incrementing the current offset try if there is a gap that can
-  // be used for the requested data.
+  // Before incrementing the current offset try if there is a gap that can be used for the requested data.
   size_t offset = ~size_t(0);
   size_t gapIndex = treeIndex;
 
@@ -171,8 +155,7 @@ Error ConstPool::add(const void* data, size_t size, size_t& dstOffset) noexcept 
   }
 
   if (offset == ~size_t(0)) {
-    // Get how many bytes have to be skipped so the address is aligned accordingly
-    // to the 'size'.
+    // Get how many bytes have to be skipped so the address is aligned accordingly to the 'size'.
     size_t diff = Support::alignUpDiff<size_t>(_size, size);
 
     if (diff != 0) {
@@ -186,40 +169,46 @@ Error ConstPool::add(const void* data, size_t size, size_t& dstOffset) noexcept 
 
   // Add the initial node to the right index.
   node = ConstPool::Tree::_newNode(_zone, data, size, offset, false);
-  if (!node) return DebugUtils::errored(kErrorOutOfMemory);
+  if (ASMJIT_UNLIKELY(!node))
+    return DebugUtils::errored(kErrorOutOfMemory);
 
   _tree[treeIndex].insert(node);
   _alignment = Support::max<size_t>(_alignment, size);
 
   dstOffset = offset;
 
-  // Now create a bunch of shared constants that are based on the data pattern.
-  // We stop at size 4, it probably doesn't make sense to split constants down
-  // to 1 byte.
+  // Now create a bunch of shared constants that are based on the data pattern. We stop at size 4,
+  // it probably doesn't make sense to split constants down to 1 byte.
   size_t pCount = 1;
-  while (size > 4) {
-    size >>= 1;
+  size_t smallerSize = size;
+
+  while (smallerSize > 4) {
     pCount <<= 1;
+    smallerSize >>= 1;
 
     ASMJIT_ASSERT(treeIndex != 0);
     treeIndex--;
 
     const uint8_t* pData = static_cast<const uint8_t*>(data);
-    for (size_t i = 0; i < pCount; i++, pData += size) {
+    for (size_t i = 0; i < pCount; i++, pData += smallerSize) {
       node = _tree[treeIndex].get(pData);
       if (node) continue;
 
-      node = ConstPool::Tree::_newNode(_zone, pData, size, offset + (i * size), true);
+      node = ConstPool::Tree::_newNode(_zone, pData, smallerSize, offset + (i * smallerSize), true);
       _tree[treeIndex].insert(node);
     }
   }
 
+  if (_minItemSize == 0)
+    _minItemSize = size;
+  else
+    _minItemSize = Support::min(_minItemSize, size);
+
   return kErrorOk;
 }
 
-// ============================================================================
-// [asmjit::ConstPool - Reset]
-// ============================================================================
+// ConstPool - Reset
+// =================
 
 struct ConstPoolFill {
   inline ConstPoolFill(uint8_t* dst, size_t dataSize) noexcept :
@@ -246,9 +235,8 @@ void ConstPool::fill(void* dst) const noexcept {
   }
 }
 
-// ============================================================================
-// [asmjit::ConstPool - Unit]
-// ============================================================================
+// ConstPool - Tests
+// =================
 
 #if defined(ASMJIT_TEST)
 UNIT(const_pool) {
@@ -258,46 +246,53 @@ UNIT(const_pool) {
   uint32_t i;
   uint32_t kCount = BrokenAPI::hasArg("--quick") ? 1000 : 1000000;
 
-  INFO("Adding %u constants to the pool.", kCount);
+  INFO("Adding %u constants to the pool", kCount);
   {
     size_t prevOffset;
     size_t curOffset;
     uint64_t c = 0x0101010101010101u;
 
-    EXPECT(pool.add(&c, 8, prevOffset) == kErrorOk);
-    EXPECT(prevOffset == 0);
+    EXPECT_EQ(pool.add(&c, 8, prevOffset), kErrorOk);
+    EXPECT_EQ(prevOffset, 0u);
 
     for (i = 1; i < kCount; i++) {
       c++;
-      EXPECT(pool.add(&c, 8, curOffset) == kErrorOk);
-      EXPECT(prevOffset + 8 == curOffset);
-      EXPECT(pool.size() == (i + 1) * 8);
+      EXPECT_EQ(pool.add(&c, 8, curOffset), kErrorOk);
+      EXPECT_EQ(prevOffset + 8, curOffset);
+      EXPECT_EQ(pool.size(), (i + 1) * 8);
       prevOffset = curOffset;
     }
 
-    EXPECT(pool.alignment() == 8);
+    EXPECT_EQ(pool.alignment(), 8u);
   }
 
-  INFO("Retrieving %u constants from the pool.", kCount);
+  INFO("Retrieving %u constants from the pool", kCount);
   {
     uint64_t c = 0x0101010101010101u;
 
     for (i = 0; i < kCount; i++) {
       size_t offset;
-      EXPECT(pool.add(&c, 8, offset) == kErrorOk);
-      EXPECT(offset == i * 8);
+      EXPECT_EQ(pool.add(&c, 8, offset), kErrorOk);
+      EXPECT_EQ(offset, i * 8);
       c++;
     }
   }
 
   INFO("Checking if the constants were split into 4-byte patterns");
   {
-    uint32_t c = 0x01010101;
-    for (i = 0; i < kCount; i++) {
-      size_t offset;
-      EXPECT(pool.add(&c, 4, offset) == kErrorOk);
-      EXPECT(offset == i * 8);
+    uint32_t c = 0x01010101u;
+    size_t offset;
+
+    EXPECT_EQ(pool.add(&c, 4, offset), kErrorOk);
+    EXPECT_EQ(offset, 0u);
+
+    // NOTE: We have to adjust the offset to successfully test this on big endian architectures.
+    size_t baseOffset = size_t(ASMJIT_ARCH_BE ? 4 : 0);
+
+    for (i = 1; i < kCount; i++) {
       c++;
+      EXPECT_EQ(pool.add(&c, 4, offset), kErrorOk);
+      EXPECT_EQ(offset, baseOffset + i * 8);
     }
   }
 
@@ -306,9 +301,9 @@ UNIT(const_pool) {
     uint16_t c = 0xFFFF;
     size_t offset;
 
-    EXPECT(pool.add(&c, 2, offset) == kErrorOk);
-    EXPECT(offset == kCount * 8);
-    EXPECT(pool.alignment() == 8);
+    EXPECT_EQ(pool.add(&c, 2, offset), kErrorOk);
+    EXPECT_EQ(offset, kCount * 8);
+    EXPECT_EQ(pool.alignment(), 8u);
   }
 
   INFO("Adding 8 byte constant to check if pool gets aligned again");
@@ -316,8 +311,8 @@ UNIT(const_pool) {
     uint64_t c = 0xFFFFFFFFFFFFFFFFu;
     size_t offset;
 
-    EXPECT(pool.add(&c, 8, offset) == kErrorOk);
-    EXPECT(offset == kCount * 8 + 8);
+    EXPECT_EQ(pool.add(&c, 8, offset), kErrorOk);
+    EXPECT_EQ(offset, kCount * 8 + 8u);
   }
 
   INFO("Adding 2 byte constant to verify the gap is filled");
@@ -325,9 +320,9 @@ UNIT(const_pool) {
     uint16_t c = 0xFFFE;
     size_t offset;
 
-    EXPECT(pool.add(&c, 2, offset) == kErrorOk);
-    EXPECT(offset == kCount * 8 + 2);
-    EXPECT(pool.alignment() == 8);
+    EXPECT_EQ(pool.add(&c, 2, offset), kErrorOk);
+    EXPECT_EQ(offset, kCount * 8 + 2);
+    EXPECT_EQ(pool.alignment(), 8u);
   }
 
   INFO("Checking reset functionality");
@@ -335,8 +330,8 @@ UNIT(const_pool) {
     pool.reset(&zone);
     zone.reset();
 
-    EXPECT(pool.size() == 0);
-    EXPECT(pool.alignment() == 0);
+    EXPECT_EQ(pool.size(), 0u);
+    EXPECT_EQ(pool.alignment(), 0u);
   }
 
   INFO("Checking pool alignment when combined constants are added");
@@ -345,29 +340,29 @@ UNIT(const_pool) {
     size_t offset;
 
     pool.add(bytes, 1, offset);
-    EXPECT(pool.size() == 1);
-    EXPECT(pool.alignment() == 1);
-    EXPECT(offset == 0);
+    EXPECT_EQ(pool.size(), 1u);
+    EXPECT_EQ(pool.alignment(), 1u);
+    EXPECT_EQ(offset, 0u);
 
     pool.add(bytes, 2, offset);
-    EXPECT(pool.size() == 4);
-    EXPECT(pool.alignment() == 2);
-    EXPECT(offset == 2);
+    EXPECT_EQ(pool.size(), 4u);
+    EXPECT_EQ(pool.alignment(), 2u);
+    EXPECT_EQ(offset, 2u);
 
     pool.add(bytes, 4, offset);
-    EXPECT(pool.size() == 8);
-    EXPECT(pool.alignment() == 4);
-    EXPECT(offset == 4);
+    EXPECT_EQ(pool.size(), 8u);
+    EXPECT_EQ(pool.alignment(), 4u);
+    EXPECT_EQ(offset, 4u);
 
     pool.add(bytes, 4, offset);
-    EXPECT(pool.size() == 8);
-    EXPECT(pool.alignment() == 4);
-    EXPECT(offset == 4);
+    EXPECT_EQ(pool.size(), 8u);
+    EXPECT_EQ(pool.alignment(), 4u);
+    EXPECT_EQ(offset, 4u);
 
     pool.add(bytes, 32, offset);
-    EXPECT(pool.size() == 64);
-    EXPECT(pool.alignment() == 32);
-    EXPECT(offset == 32);
+    EXPECT_EQ(pool.size(), 64u);
+    EXPECT_EQ(pool.alignment(), 32u);
+    EXPECT_EQ(offset, 32u);
   }
 }
 #endif

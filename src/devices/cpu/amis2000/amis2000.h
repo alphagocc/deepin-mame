@@ -32,40 +32,24 @@ public:
 	// uncustomizable, but wildfire proves to be an exception to that rule.
 	void set_7seg_table(const u8 *ptr) { m_7seg_table = ptr; } // d0=A, d1=B, etc.
 
-	void data_64x4(address_map &map);
-	void data_80x4(address_map &map);
-	void program_1_5k(address_map &map);
-	void program_1k(address_map &map);
+	void data_64x4(address_map &map) ATTR_COLD;
+	void data_80x4(address_map &map) ATTR_COLD;
+	void program_1_5k(address_map &map) ATTR_COLD;
+	void program_1k(address_map &map) ATTR_COLD;
 
 protected:
 	// construction/destruction
-	amis2000_base_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock, u8 bu_bits, u8 callstack_bits, u8 callstack_depth, int prgwidth, address_map_constructor program, int datawidth, address_map_constructor data)
-		: cpu_device(mconfig, type, tag, owner, clock)
-		, m_program_config("program", ENDIANNESS_BIG, 8, prgwidth, 0, program)
-		, m_data_config("data", ENDIANNESS_BIG, 8, datawidth, 0, data)
-		, m_bu_bits(bu_bits)
-		, m_callstack_bits(callstack_bits)
-		, m_callstack_depth(callstack_depth)
-		, m_7seg_table(nullptr)
-		, m_read_k(*this)
-		, m_read_i(*this)
-		, m_read_d(*this)
-		, m_write_d(*this)
-		, m_write_a(*this)
-		, m_write_f(*this)
-	{
-	}
+	amis2000_base_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, u32 clock, u8 bu_bits, u8 callstack_bits, u8 callstack_depth, int prgwidth, address_map_constructor program, int datawidth, address_map_constructor data);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual u64 execute_clocks_to_cycles(u64 clocks) const noexcept override { return (clocks + 4 - 1) / 4; } // 4 cycles per machine cycle
 	virtual u64 execute_cycles_to_clocks(u64 cycles) const noexcept override { return (cycles * 4); } // "
 	virtual u32 execute_min_cycles() const noexcept override { return 1; }
 	virtual u32 execute_max_cycles() const noexcept override { return 2; }
-	virtual u32 execute_input_lines() const noexcept override { return 1; }
 	virtual void execute_run() override;
 
 	// device_memory_interface overrides
@@ -82,13 +66,15 @@ protected:
 	address_space *m_program;
 	address_space *m_data;
 
+	int m_icount;
+	int m_state_count;
+
 	u8 m_bu_bits;
 	u16 m_bu_mask;
 	u8 m_callstack_bits;  // number of program counter bits held in callstack
 	u16 m_callstack_mask;
 	u8 m_callstack_depth; // callstack levels: 3 on 2000/2150, 5 on 2200/2400
 	u16 m_callstack[5];   // max 5
-	int m_icount;
 	u16 m_pc;             // 13-bit program counter
 	u8 m_ppr;             // prepared page register (PP 1)
 	u8 m_pbr;             // prepared bank register (PP 2)
@@ -205,8 +191,8 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// digital-to-frequency converter
 	u8 m_d2f_latch;

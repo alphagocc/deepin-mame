@@ -14,8 +14,6 @@ newoption {
 premake.check_paths = true
 premake.make.override = { "TARGET" }
 
-premake.xcode.parameters = { 'CLANG_CXX_LANGUAGE_STANDARD = "c++17"', 'CLANG_CXX_LIBRARY = "libc++"' }
-
 MAME_DIR = (path.getabsolute("..") .. "/")
 --MAME_DIR = string.gsub(MAME_DIR, "(%s)", "\\%1")
 local MAME_BUILD_DIR = (MAME_DIR .. _OPTIONS["build-dir"] .. "/")
@@ -37,33 +35,37 @@ end
 
 function str_to_version(str)
 	local val = 0
-	if (str == nil or str == '') then
+	if not str then
 		return val
 	end
-	local cnt = 10000
-	for word in string.gmatch(str, '([^.]+)') do
-		if(tonumber(word) == nil) then
+	local scale = 10000
+	for word, sep in str:gmatch('([^.-]+)([.-]?)') do
+		local part = tonumber(word)
+		if not part then
 			return val
 		end
-		val = val + tonumber(word) * cnt
-		cnt = cnt / 100
+		val = val + tonumber(word) * scale
+		scale = scale // 100
+		if (scale == 0) or (sep ~= '.') then
+			return val
+		end
 	end
 	return val
 end
 
 function findfunction(x)
 	assert(type(x) == "string")
-	local f=_G
+	local f = _G
 	for v in x:gmatch("[^%.]+") do
-	if type(f) ~= "table" then
-		return nil, "looking for '"..v.."' expected table, not "..type(f)
-	end
-	f=f[v]
+		if type(f) ~= "table" then
+			return nil, "looking for '" .. v .. "' expected table, not " .. type(f)
+		end
+		f = f[v]
 	end
 	if type(f) == "function" then
-	return f
+		return f
 	else
-	return nil, "expected function, not "..type(f)
+		return nil, "expected function, not " .. type(f)
 	end
 end
 
@@ -74,8 +76,7 @@ end
 
 function precompiledheaders()
 	if _OPTIONS["precompile"]==nil or (_OPTIONS["precompile"]~=nil and _OPTIONS["precompile"]=="1") then
-		configuration { "not xcode4" }
-			pchheader("emu.h")
+		pchheader("emu.h")
 		configuration { }
 	end
 end
@@ -95,7 +96,6 @@ function addprojectflags()
 	if _OPTIONS["gcc"]~=nil and string.find(_OPTIONS["gcc"], "gcc") then
 		buildoptions_cpp {
 			"-Wsuggest-override",
-			"-flifetime-dse=1",
 		}
 	end
 end
@@ -118,6 +118,11 @@ FORMATS  = {}
 newoption {
 	trigger = "with-tools",
 	description = "Enable building tools.",
+}
+
+newoption {
+	trigger = "with-emulator",
+	description = "Enable building emulator.",
 }
 
 newoption {
@@ -144,22 +149,12 @@ newoption {
 		{ "freebsd",       "FreeBSD"                },
 		{ "netbsd",        "NetBSD"                 },
 		{ "openbsd",       "OpenBSD"                },
-		{ "pnacl",         "Native Client - PNaCl"  },
 		{ "linux",         "Linux"                  },
-		{ "ios",           "iOS"                    },
 		{ "macosx",        "OSX"                    },
 		{ "windows",       "Windows"                },
 		{ "haiku",         "Haiku"                  },
 		{ "solaris",       "Solaris SunOS"          },
-		{ "steamlink",     "Steam Link"             },
-		{ "rpi",           "Raspberry Pi"           },
-		{ "ci20",          "Creator-Ci20"           },
 	},
-}
-
-newoption {
-	trigger = 'with-bundled-sdl2',
-	description = 'Build bundled SDL2 library',
 }
 
 newoption {
@@ -398,6 +393,11 @@ newoption {
 }
 
 newoption {
+	trigger = "SOURCEFILTER",
+	description = "Filter list specifying sources to compile.",
+}
+
+newoption {
 	trigger = "PLATFORM",
 	description = "Target machine platform (x86,arm,...)",
 }
@@ -461,11 +461,7 @@ if (_OPTIONS["subtarget"] == nil) then return false end
 if (_OPTIONS["target"] == _OPTIONS["subtarget"]) then
 	solution (_OPTIONS["target"])
 else
-	if (_OPTIONS["subtarget"]=="mess") then
-		solution (_OPTIONS["subtarget"])
-	else
-		solution (_OPTIONS["target"] .. _OPTIONS["subtarget"])
-	end
+	solution (_OPTIONS["target"] .. _OPTIONS["subtarget"])
 end
 
 
@@ -474,17 +470,11 @@ configurations {
 	"Release",
 }
 
-if _ACTION == "xcode4" then
-	platforms {
-		"x64",
-	}
-else
-	platforms {
-		"x32",
-		"x64",
-		"Native", -- for targets where bitness is not specified
-	}
-end
+platforms {
+	"x32",
+	"x64",
+	"Native", -- for targets where bitness is not specified
+}
 
 language "C++"
 
@@ -528,52 +518,7 @@ configuration { "Release", "vs20*" }
 		}
 	end
 
-configuration { "vsllvm" }
-	buildoptions {
-		"/bigobj",
-	}
-	flags {
-		"NoPCH",
-		"ExtraWarnings",
-	}
-	if not _OPTIONS["NOWERROR"] then
-		flags{
-			"FatalWarnings",
-		}
-	end
-
-
-configuration { "Debug", "vsllvm" }
-	flags {
-		"Symbols",
-		"NoMultiProcessorCompilation",
-	}
-
-configuration { "Release", "vsllvm" }
-	flags {
-		"Optimize",
-		"NoEditAndContinue",
-		"NoIncrementalLink",
-	}
-
--- Force VS2015/17 targets to use bundled SDL2
-if string.sub(_ACTION,1,4) == "vs20" and _OPTIONS["osd"]=="sdl" then
-	if _OPTIONS["with-bundled-sdl2"]==nil then
-		_OPTIONS["with-bundled-sdl2"] = "1"
-	end
-end
--- Build SDL2 for Android
-if _OPTIONS["targetos"] == "android" then
-	_OPTIONS["with-bundled-sdl2"] = "1"
-end
-
 configuration {}
-
-if _OPTIONS["osd"] == "uwp" then
-	windowstargetplatformversion("10.0.14393.0")
-	windowstargetplatformminversion("10.0.14393.0")
-	premake._filelevelconfig = true
-end
 
 msgcompile ("Compiling $(subst ../,,$<)...")
 
@@ -589,18 +534,33 @@ msgprecompile ("Precompiling $(subst ../,,$<)...")
 
 messageskip { "SkipCreatingMessage", "SkipBuildingMessage", "SkipCleaningMessage" }
 
-if (_OPTIONS["PROJECT"] ~= nil) then
-	PROJECT_DIR = path.join(path.getabsolute(".."),"projects",_OPTIONS["PROJECT"]) .. "/"
-	if (not os.isfile(path.join("..", "projects", _OPTIONS["PROJECT"], "scripts", "target", _OPTIONS["target"],_OPTIONS["subtarget"] .. ".lua"))) then
-		error("File definition for TARGET=" .. _OPTIONS["target"] .. " SUBTARGET=" .. _OPTIONS["subtarget"] .. " does not exist")
+if _OPTIONS["with-emulator"] then
+	if (_OPTIONS["PROJECT"] ~= nil) then
+		PROJECT_DIR = path.join(path.getabsolute(".."),"projects",_OPTIONS["PROJECT"]) .. "/"
+		if (not os.isfile(path.join("..", "projects", _OPTIONS["PROJECT"], "scripts", "target", _OPTIONS["target"],_OPTIONS["subtarget"] .. ".lua"))) then
+			error("File definition for TARGET=" .. _OPTIONS["target"] .. " SUBTARGET=" .. _OPTIONS["subtarget"] .. " does not exist")
+		end
+		dofile (path.join(".." ,"projects", _OPTIONS["PROJECT"], "scripts", "target", _OPTIONS["target"],_OPTIONS["subtarget"] .. ".lua"))
+	elseif (_OPTIONS["SOURCES"] == nil) and (_OPTIONS["SOURCEFILTER"] == nil) then
+		local subtargetscript = path.join("target", _OPTIONS["target"], _OPTIONS["subtarget"] .. ".lua")
+		local subtargetfilter = path.join(MAME_DIR, "src", _OPTIONS["target"], _OPTIONS["subtarget"] .. ".flt")
+		if os.isfile(subtargetscript) then
+			dofile(subtargetscript)
+		elseif os.isfile(subtargetfilter) then
+			local makedep = path.join(MAME_DIR, "scripts", "build", "makedep.py")
+			local driverlist = path.join(MAME_DIR, "src", _OPTIONS["target"], _OPTIONS["target"] .. ".lst")
+			local OUT_STR = os.outputof(
+				string.format(
+					"%s %s -r %s filterproject -t %s -f %s %s",
+					PYTHON, makedep, MAME_DIR, _OPTIONS["subtarget"], subtargetfilter, driverlist))
+			if #OUT_STR == 0 then
+				error("Error creating projects from driver filter file for subtarget " .. _OPTIONS["subtarget"])
+			end
+			load(OUT_STR)()
+		else
+			error("Definition file for TARGET=" .. _OPTIONS["target"] .. " SUBTARGET=" .. _OPTIONS["subtarget"] .. " does not exist")
+		end
 	end
-	dofile (path.join(".." ,"projects", _OPTIONS["PROJECT"], "scripts", "target", _OPTIONS["target"],_OPTIONS["subtarget"] .. ".lua"))
-end
-if (_OPTIONS["SOURCES"] == nil and _OPTIONS["PROJECT"] == nil) then
-	if (not os.isfile(path.join("target", _OPTIONS["target"],_OPTIONS["subtarget"] .. ".lua"))) then
-		error("File definition for TARGET=" .. _OPTIONS["target"] .. " SUBTARGET=" .. _OPTIONS["subtarget"] .. " does not exist")
-	end
-	dofile (path.join("target", _OPTIONS["target"],_OPTIONS["subtarget"] .. ".lua"))
 end
 
 configuration { "gmake or ninja" }
@@ -785,11 +745,9 @@ local version = str_to_version(_OPTIONS["gcc_version"])
 		"-std=c++17",
 	}
 -- this speeds it up a bit by piping between the preprocessor/compiler/assembler
-	if not ("pnacl" == _OPTIONS["gcc"]) then
-		buildoptions {
-			"-pipe",
-		}
-	end
+	buildoptions {
+		"-pipe",
+	}
 -- add -g if we need symbols, and ensure we have frame pointers
 if _OPTIONS["SYMBOLS"]~=nil and _OPTIONS["SYMBOLS"]~="0" then
 	buildoptions {
@@ -1037,6 +995,7 @@ end
 -- warnings only applicable to C++ compiles
 	buildoptions_cpp {
 		"-Woverloaded-virtual",
+		"-Wvla",
 	}
 
 if _OPTIONS["SANITIZE"] then
@@ -1075,9 +1034,9 @@ end
 
 
 		local version = str_to_version(_OPTIONS["gcc_version"])
-		if string.find(_OPTIONS["gcc"], "clang") or string.find(_OPTIONS["gcc"], "pnacl") or string.find(_OPTIONS["gcc"], "asmjs") or string.find(_OPTIONS["gcc"], "android") then
-			if (version < 60000) then
-				print("Clang version 6.0 or later needed")
+		if string.find(_OPTIONS["gcc"], "clang") or string.find(_OPTIONS["gcc"], "asmjs") or string.find(_OPTIONS["gcc"], "android") then
+			if version < 70000 then
+				print("Clang version 7.0 or later needed")
 				os.exit(-1)
 			end
 			buildoptions {
@@ -1093,55 +1052,53 @@ end
 				"-Wno-unused-value",
 				"-Wno-unused-const-variable",
 			}
-			if (version < 70000) or ((version < 100001) and (_OPTIONS["targetos"] == 'macosx')) then
-				buildoptions { -- clang 6.0 complains that [[maybe_unused]] is ignored for static data members
-					"-Wno-error=ignored-attributes",
-					"-Wno-error=unused-const-variable",
-				}
-			end
 			if ((version >= 100000) and (_OPTIONS["targetos"] ~= 'macosx')) or (version >= 120000) then
 				buildoptions {
 					"-Wno-xor-used-as-pow", -- clang 10.0 complains that expressions like 10 ^ 7 look like exponention
 				}
 			end
+			if version >= 140000 then
+				buildoptions {
+					"-Wno-bitwise-instead-of-logical", -- clang 14.0 complains about &, | on bools in asmjit
+				}
+			end
 		else
-			if (version < 70000) then
-				print("GCC version 7.0 or later needed")
+			if version < 100300 then
+				print("GCC version 10.3 or later needed")
 				os.exit(-1)
 			end
-				buildoptions_cpp {
-					"-Wimplicit-fallthrough",
-				}
-				buildoptions_objcpp {
-					"-Wimplicit-fallthrough",
-				}
-				buildoptions {
-					"-Wno-unused-result", -- needed for fgets,fread on linux
-					-- array bounds checking seems to be buggy in 4.8.1 (try it on video/stvvdp1.c and video/model1.c without -Wno-array-bounds)
-					"-Wno-array-bounds",
-					"-Wno-error=attributes", -- GCC fails to recognize some uses of [[maybe_unused]]
-				}
-			if (version >= 80000) then
-				buildoptions {
-					"-Wno-format-overflow", -- try machine/bfm_sc45_helper.cpp in GCC 8.0.1, among others
-					"-Wno-stringop-truncation", -- ImGui again
-					"-Wno-stringop-overflow",   -- formats/victor9k_dsk.cpp bugs the compiler
-				}
-				buildoptions_cpp {
-					"-Wno-class-memaccess", -- many instances in ImGui and BGFX
-				}
-			end
-			if (version >= 100000) then
-				buildoptions {
-					"-Wno-return-local-addr", -- sqlite3.c in GCC 10
-				}
-			end
-			if (version >= 110000) then
+			buildoptions_cpp {
+				"-Wimplicit-fallthrough",
+			}
+			buildoptions_objcpp {
+				"-Wimplicit-fallthrough",
+			}
+			buildoptions {
+				"-Wno-error=unused-result", -- needed for fgets,fread on linux
+				-- array bounds checking seems to be buggy in 4.8.1 (try it on video/stvvdp1.c and video/model1.c without -Wno-array-bounds)
+				"-Wno-error=array-bounds",
+				"-Wno-error=attributes", -- GCC fails to recognize some uses of [[maybe_unused]]
+				"-Wno-error=stringop-truncation", -- ImGui again
+				"-Wno-stringop-overflow", -- generates false positives when assigning an int rvalue to a u8 variable without an explicit cast
+			}
+			buildoptions_cpp {
+				"-Wno-error=class-memaccess", -- many instances in ImGui and BGFX
+			}
+			if version >= 110000 then
 				buildoptions {
 					"-Wno-nonnull",                 -- luaengine.cpp lambdas do not need "this" captured but GCC 11.1 erroneously insists
 					"-Wno-stringop-overread",       -- machine/bbc.cpp in GCC 11.1
-					"-Wno-misleading-indentation",  -- sqlite3.c in GCC 11.1
-					"-Wno-maybe-uninitialized"      -- expat in GCC 11.1
+				}
+			end
+			if version >= 120000 then
+				buildoptions {
+					"-Wno-error=maybe-uninitialized",
+					"-Wno-error=uninitialized",   -- netlist
+				}
+			end
+			if version >= 130000 then
+				buildoptions_cpp {
+					"-Wno-xor-used-as-pow",
 				}
 			end
 		end
@@ -1199,49 +1156,74 @@ configuration { "asmjs" }
 	}
 	buildoptions_cpp {
 		"-std=c++17",
-		"-s DISABLE_EXCEPTION_CATCHING=2",
-		"-s EXCEPTION_CATCHING_WHITELIST=\"['_ZN15running_machine17start_all_devicesEv','_ZN12cli_frontend7executeEiPPc','_ZN8chd_file11open_commonEb','_ZN8chd_file13read_metadataEjjRNSt3__212basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE','_ZN8chd_file13read_metadataEjjRNSt3__26vectorIhNS0_9allocatorIhEEEE','_ZNK19netlist_mame_device19base_validity_checkER16validity_checker']\"",
+		"-s EXCEPTION_CATCHING_ALLOWED=\"['_ZN15running_machine17start_all_devicesEv','_ZN12cli_frontend7executeEiPPc','_ZN8chd_file11open_commonEb','_ZN8chd_file13read_metadataEjjRNSt3__212basic_stringIcNS0_11char_traitsIcEENS0_9allocatorIcEEEE','_ZN8chd_file13read_metadataEjjRNSt3__26vectorIhNS0_9allocatorIhEEEE','_ZNK19netlist_mame_device19base_validity_checkER16validity_checker']\"",
+	}
+	defines {
+		"ASIO_HAS_PTHREADS",
 	}
 	linkoptions {
 		"-Wl,--start-group",
-		"-r",
+		"-O" .. _OPTIONS["OPTIMIZE"],
+		"-s USE_SDL=2",
+		"-s USE_SDL_TTF=2",
+		"--memory-init-file 0",
+		"-s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=\"['\\$$ERRNO_CODES']\"",
+		"-s EXPORTED_FUNCTIONS=\"['_main', '_malloc', '__ZN15running_machine30emscripten_get_running_machineEv', '__ZN15running_machine17emscripten_get_uiEv', '__ZN15running_machine20emscripten_get_soundEv', '__ZN15mame_ui_manager12set_show_fpsEb', '__ZNK15mame_ui_manager8show_fpsEv', '__ZN13sound_manager4muteEbh', '_SDL_PauseAudio', '_SDL_SendKeyboardKey', '__ZN15running_machine15emscripten_saveEPKc', '__ZN15running_machine15emscripten_loadEPKc', '__ZN15running_machine21emscripten_hard_resetEv', '__ZN15running_machine21emscripten_soft_resetEv', '__ZN15running_machine15emscripten_exitEv']\"",
+		"-s EXPORTED_RUNTIME_METHODS=\"['cwrap']\"",
+		"-s ERROR_ON_UNDEFINED_SYMBOLS=0",
+		"-s USE_WEBGL2=1",
+		"-s LEGACY_GL_EMULATION=1",
+		"-s GL_UNSAFE_OPTS=0",
+		"--pre-js " .. _MAKE.esc(MAME_DIR) .. "src/osd/modules/sound/js_sound.js",
+		"--post-js " .. _MAKE.esc(MAME_DIR) .. "scripts/resources/emscripten/emscripten_post.js",
+		"--embed-file " .. _MAKE.esc(MAME_DIR) .. "bgfx/chains@bgfx/chains",
+		"--embed-file " .. _MAKE.esc(MAME_DIR) .. "bgfx/effects@bgfx/effects",
+		"--embed-file " .. _MAKE.esc(MAME_DIR) .. "bgfx/shaders/essl@bgfx/shaders/essl",
+		"--embed-file " .. _MAKE.esc(MAME_DIR) .. "artwork/bgfx@artwork/bgfx",
+		"--embed-file " .. _MAKE.esc(MAME_DIR) .. "artwork/slot-mask.png@artwork/slot-mask.png",
 	}
+	if _OPTIONS["SYMBOLS"]~=nil and _OPTIONS["SYMBOLS"]~="0" then
+		linkoptions {
+			"-g" .. _OPTIONS["SYMLEVEL"],
+			"-s DEMANGLE_SUPPORT=1",
+		}
+	end
+	if _OPTIONS["WEBASSEMBLY"] then
+		linkoptions {
+			"-s WASM=" .. _OPTIONS["WEBASSEMBLY"],
+		}
+	else
+		linkoptions {
+			"-s WASM=1",
+		}
+	end
+	if _OPTIONS["WEBASSEMBLY"]~=nil and _OPTIONS["WEBASSEMBLY"]=="0" then
+		-- define a fixed memory size because allowing memory growth disables asm.js optimizations
+		linkoptions {
+			"-s ALLOW_MEMORY_GROWTH=0",
+			"-s TOTAL_MEMORY=268435456",
+		}
+	else
+		linkoptions {
+			"-s ALLOW_MEMORY_GROWTH=1",
+		}
+	end
 	archivesplit_size "20"
 
 configuration { "android*" }
 	buildoptions {
-		"-Wno-undef",
-		"-Wno-typedef-redefinition",
-		"-Wno-unknown-warning-option",
-		"-Wno-incompatible-ms-struct",
-	}
-	buildoptions_cpp {
-		"-std=c++17",
-		"-Wno-extern-c-compat",
-		"-Wno-tautological-constant-out-of-range-compare",
-		"-Wno-tautological-pointer-compare",
+		"-Wno-error=undef", -- in ASIO
+		"-Wno-error=macro-redefined", -- PAGE_SIZE,PAGE_MASK in fairlight/cmi.cpp
 	}
 	archivesplit_size "20"
 
-configuration { "android-arm64" }
-	buildoptions {
-		"-Wno-asm-operand-widths",
-	}
-
-configuration { "pnacl" }
-	buildoptions {
-		"-std=gnu89",
-		"-Wno-inline-new-delete",
-	}
-	buildoptions_cpp {
-		"-std=c++17",
-	}
-	archivesplit_size "20"
-
-configuration { "linux-* or rpi or ci20"}
+configuration { "linux-*" }
 		links {
 			"dl",
 			"rt",
+		}
+		flags {
+			"LinkSupportCircularDependencies",
 		}
 		if _OPTIONS["distro"]=="debian-stable" then
 			defines
@@ -1251,43 +1233,12 @@ configuration { "linux-* or rpi or ci20"}
 		end
 
 
+configuration { "freebsd or netbsd" }
+		flags {
+			"LinkSupportCircularDependencies",
+		}
 
-configuration { "steamlink" }
-	links {
-		"dl",
-		"EGL",
-		"GLESv2",
-		"SDL2",
-	}
-	defines {
-		"EGL_API_FB",
-	}
-
-configuration { "rpi" }
-	links {
-		"SDL2",
-		"fontconfig",
-		"X11",
-		"GLESv2",
-		"EGL",
-		"bcm_host",
-		"vcos",
-		"vchiq_arm",
-		"pthread",
-	}
-
-
-configuration { "ci20" }
-	links {
-		"SDL2",
-		"asound",
-		"fontconfig",
-		"freetype",
-		"pthread",
-	}
-
-
-configuration { "osx* or xcode4" }
+configuration { "osx*" }
 		links {
 			"pthread",
 		}
@@ -1318,19 +1269,6 @@ configuration { "mingw*" }
 			"userenv",
 		}
 
-configuration { "vsllvm" }
-	defines {
-		"XML_STATIC",
-		"WIN32",
-		"_WIN32",
-		"_CRT_NONSTDC_NO_DEPRECATE",
-		"_CRT_SECURE_NO_DEPRECATE",
-		"_CRT_STDIO_LEGACY_WIDE_SPECIFIERS",
-	}
-	includedirs {
-		MAME_DIR .. "3rdparty/dxsdk/Include"
-	}
-
 configuration { "vs20*" }
 		defines {
 			"XML_STATIC",
@@ -1341,8 +1279,6 @@ configuration { "vs20*" }
 			"_CRT_STDIO_LEGACY_WIDE_SPECIFIERS",
 		}
 
--- Windows Store/Phone projects already link against the available libraries.
-if _OPTIONS["vs"]==nil or not (string.startswith(_OPTIONS["vs"], "winstore8") or string.startswith(_OPTIONS["vs"], "winphone8")) then
 		links {
 			"user32",
 			"winmm",
@@ -1355,10 +1291,8 @@ if _OPTIONS["vs"]==nil or not (string.startswith(_OPTIONS["vs"], "winstore8") or
 			"shell32",
 			"userenv",
 		}
-end
 
 		buildoptions {
-			"/WX",     -- Treats all compiler warnings as errors.
 			"/w45038", -- warning C5038: data member 'member1' will be initialized after data member 'member2'
 		}
 
@@ -1461,55 +1395,61 @@ end
 		includedirs {
 			MAME_DIR .. "3rdparty/dxsdk/Include"
 		}
-configuration { "winphone8* or winstore8*" }
-	linkoptions {
-		"/ignore:4264" -- LNK4264: archiving object file compiled with /ZW into a static library; note that when authoring Windows Runtime types it is not recommended to link with a static library that contains Windows Runtime metadata
-	}
-configuration { "vsllvm" }
-		buildoptions {
-			"-Wno-tautological-constant-out-of-range-compare",
-			"-Wno-ignored-qualifiers",
-			"-Wno-missing-field-initializers",
-			"-Wno-ignored-pragma-optimize",
-			"-Wno-unknown-warning-option",
-			"-Wno-unused-function",
-			"-Wno-unused-label",
-			"-Wno-unused-local-typedef",
-			"-Wno-unused-const-variable",
-			"-Wno-unused-parameter",
-			"-Wno-unneeded-internal-declaration",
-			"-Wno-unused-private-field",
-			"-Wno-missing-braces",
-			"-Wno-unused-variable",
-			"-Wno-tautological-pointer-compare",
-			"-Wno-nonportable-include-path",
-			"-Wno-enum-conversion",
-			"-Wno-pragma-pack",
-			"-Wno-new-returns-null",
-			"-Wno-sign-compare",
-			"-Wno-switch",
-			"-Wno-tautological-undefined-compare",
-			"-Wno-deprecated-declarations",
-			"-Wno-macro-redefined",
-			"-Wno-narrowing",
-		}
-
 
 configuration { }
 
-if (_OPTIONS["SOURCES"] ~= nil) then
+if _OPTIONS["SOURCES"] ~= nil then
+	if _OPTIONS["SOURCEFILTER"] ~= nil then
+		error("SOURCES and SOURCEFILTER cannot be combined")
+	end
+
+	local makedep = path.join(MAME_DIR, "scripts", "build", "makedep.py")
 	local str = _OPTIONS["SOURCES"]
 	local sourceargs = ""
 	for word in string.gmatch(str, '([^,]+)') do
-		if (not os.isfile(path.join(MAME_DIR, word))) then
-			print("File " .. word.. " does not exist")
-			os.exit()
+		local fullpath = path.join(MAME_DIR, word)
+		if (not os.isfile(fullpath)) and (not os.isdir(fullpath)) then
+			word = path.join("src", _OPTIONS["target"], word)
+			fullpath = path.join(MAME_DIR, word)
+			if (not os.isfile(fullpath)) and (not os.isdir(fullpath)) then
+				error("File/directory " .. word .. " does not exist")
+			end
 		end
 		sourceargs = sourceargs .. " " .. word
 	end
-	OUT_STR = os.outputof( PYTHON .. " " .. MAME_DIR .. "scripts/build/makedep.py sourcesproject -r " .. MAME_DIR .. " -t " .. _OPTIONS["subtarget"] .. sourceargs )
+
+	local driverlist = path.join(MAME_DIR, "src", _OPTIONS["target"], _OPTIONS["target"] .. ".lst")
+	local OUT_STR = os.outputof(
+		string.format(
+			"%s %s -r %s sourcesproject -t %s -l %s %s",
+			PYTHON, makedep, MAME_DIR, _OPTIONS["subtarget"], driverlist, sourceargs))
+	if #OUT_STR == 0 then
+		error("Error creating projects from specified source files")
+	end
 	load(OUT_STR)()
-	os.outputof( PYTHON .. " " .. MAME_DIR .. "scripts/build/makedep.py sourcesfilter" .. sourceargs .. " > ".. GEN_DIR  .. _OPTIONS["target"] .. "/" .. _OPTIONS["subtarget"] .. ".flt" )
+
+	local driverlist = path.join(MAME_DIR, "src", _OPTIONS["target"], _OPTIONS["target"] .. ".lst")
+	local driverfilter = path.join(GEN_DIR, _OPTIONS["target"], _OPTIONS["subtarget"] .. ".flt")
+	os.outputof(
+		string.format(
+			"%s %s -r %s sourcesfilter -l %s %s > %s",
+			PYTHON, makedep, MAME_DIR, driverlist, sourceargs, driverfilter))
+elseif _OPTIONS["SOURCEFILTER"] ~= nil then
+	local driverfilter = path.join(MAME_DIR, _OPTIONS["SOURCEFILTER"])
+	if not os.isfile(driverfilter) then
+		error("File " .. _OPTIONS["SOURCEFILTER"] .. " does not exist")
+	end
+
+	local makedep = path.join(MAME_DIR, "scripts", "build", "makedep.py")
+	local driverlist = path.join(MAME_DIR, "src", _OPTIONS["target"], _OPTIONS["target"] .. ".lst")
+	local OUT_STR = os.outputof(
+		string.format(
+			"%s %s -r %s filterproject -t %s -f %s %s",
+			PYTHON, makedep, MAME_DIR, _OPTIONS["subtarget"], driverfilter, driverlist))
+	if #OUT_STR == 0 then
+		error("Error creating projects from specified driver filter file")
+	end
+	load(OUT_STR)()
 end
 
 group "libs"
@@ -1535,36 +1475,34 @@ group "core"
 
 dofile(path.join("src", "emu.lua"))
 
-if (STANDALONE~=true) then
-	dofile(path.join("src", "mame", "frontend.lua"))
-end
-
 group "devices"
 dofile(path.join("src", "devices.lua"))
 devicesProject(_OPTIONS["target"],_OPTIONS["subtarget"])
 
-if (STANDALONE~=true) then
-	group "drivers"
-	findfunction("createProjects_" .. _OPTIONS["target"] .. "_" .. _OPTIONS["subtarget"])(_OPTIONS["target"], _OPTIONS["subtarget"])
-end
+if _OPTIONS["with-emulator"] then
+	if (STANDALONE~=true) then
+		dofile(path.join("src", "mame", "frontend.lua"))
+	end
 
-group "emulator"
-dofile(path.join("src", "main.lua"))
-if (_OPTIONS["SOURCES"] == nil) then
-	if (_OPTIONS["target"] == _OPTIONS["subtarget"]) then
-		startproject (_OPTIONS["target"])
-	else
-		if (_OPTIONS["subtarget"]=="mess") then
-			startproject (_OPTIONS["subtarget"])
+	if (STANDALONE~=true) then
+		group "drivers"
+		findfunction("createProjects_" .. _OPTIONS["target"] .. "_" .. _OPTIONS["subtarget"])(_OPTIONS["target"], _OPTIONS["subtarget"])
+	end
+
+	group "emulator"
+	dofile(path.join("src", "main.lua"))
+	if (_OPTIONS["SOURCES"] == nil) and (_OPTIONS["SOURCEFILTER"] == nil) then
+		if (_OPTIONS["target"] == _OPTIONS["subtarget"]) then
+			startproject (_OPTIONS["target"])
 		else
 			startproject (_OPTIONS["target"] .. _OPTIONS["subtarget"])
 		end
+	else
+		startproject (_OPTIONS["subtarget"])
 	end
-else
-	startproject (_OPTIONS["subtarget"])
+	mainProject(_OPTIONS["target"],_OPTIONS["subtarget"])
+	strip()
 end
-mainProject(_OPTIONS["target"],_OPTIONS["subtarget"])
-strip()
 
 if _OPTIONS["with-tools"] then
 	group "tools"
@@ -1589,10 +1527,15 @@ function generate_has_header(hashname, hash)
    file:write(string.format("#ifndef GENERATED_HAS_%s_H\n", hashname))
    file:write(string.format("#define GENERATED_HAS_%s_H\n", hashname))
    file:write("\n")
+   active = {}
    for k, v in pairs(hash) do
 	  if v then
-		 file:write(string.format("#define HAS_%s_%s\n", hashname, k))
+		 active[#active+1] = k
 	  end
+   end
+   table.sort(active)
+   for _, k in ipairs(active) do
+	  file:write(string.format("#define HAS_%s_%s\n", hashname, k))
    end
    file:write("\n")
    file:write("#endif\n")

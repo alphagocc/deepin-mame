@@ -99,6 +99,8 @@ public:
 	unsp_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 	virtual ~unsp_device();
 
+	void set_vectorbase(uint16_t vector) { m_vectorbase = vector; }
+
 	uint8_t get_csb();
 
 	void set_ds(uint16_t ds);
@@ -122,14 +124,13 @@ protected:
 	unsp_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, address_map_constructor internal);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_stop() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+	virtual void device_stop() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 5; }
 	virtual uint32_t execute_max_cycles() const noexcept override { return 5; }
-	virtual uint32_t execute_input_lines() const noexcept override { return 0; }
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
 
@@ -317,6 +318,7 @@ private:
 	uml::code_handle *m_mem_write;
 
 	bool m_enable_drc;
+	uint16_t m_vectorbase;
 
 	void execute_run_drc();
 	void flush_drc_cache();
@@ -392,8 +394,8 @@ protected:
 	virtual std::unique_ptr<util::disasm_interface> create_disassembler() override;
 	virtual void execute_extended_group(uint16_t op) override;
 
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 private:
 	enum

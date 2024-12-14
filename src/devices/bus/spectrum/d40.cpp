@@ -32,7 +32,7 @@ DEFINE_DEVICE_TYPE(SPECTRUM_D80V2, spectrum_d80v2_device, "spectrum_d80v2", "Did
 
 INPUT_PORTS_START(d40)
 	PORT_START("BUTTON")
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_BUTTON1) PORT_NAME("Snapshot Button") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHANGED_MEMBER(DEVICE_SELF, spectrum_d40base_device, snapshot_button, 0)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_BUTTON1) PORT_NAME("Snapshot Button") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(spectrum_d40base_device::snapshot_button), 0)
 
 	PORT_START("JOY")
 	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_JOYSTICK_RIGHT) PORT_8WAY
@@ -211,7 +211,7 @@ void spectrum_d40base_device::device_reset()
 //  IMPLEMENTATION  spectrum_d40base_device
 //**************************************************************************
 
-READ_LINE_MEMBER(spectrum_d40base_device::romcs)
+bool spectrum_d40base_device::romcs()
 {
 	return m_romcs;
 }
@@ -246,7 +246,7 @@ void spectrum_d40base_device::pre_opcode_fetch(offs_t offset)
 
 uint8_t spectrum_d40base_device::iorq_r(offs_t offset)
 {
-	uint8_t data = 0xff;
+	uint8_t data = offset & 1 ? m_slot->fb_r() : 0xff;
 
 	switch (offset & 0xf9)
 	{

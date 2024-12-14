@@ -36,13 +36,6 @@ public:
 			device_t *owner,
 			u32 clock);
 
-	enum
-	{
-		TIMER_ID_SCAN_KEYS,
-		TIMER_ID_FIRST_BYTE,
-		TIMER_ID_SECOND_BYTE
-	};
-
 	template <typename... T>
 	void set_keyboard_callback(T &&... args)
 	{
@@ -56,20 +49,26 @@ protected:
 			char const *tag,
 			device_t *owner,
 			u32 clock);
-	virtual ioport_constructor device_input_ports() const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void send_byte(u8 code);
 	void key_changed(int x, int y, bool down);
-	void scan_keys();
 	void update_modifiers(int y, bool down);
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+
+	TIMER_CALLBACK_MEMBER(scan_keys);
+	TIMER_CALLBACK_MEMBER(send_first_byte);
+	TIMER_CALLBACK_MEMBER(send_second_byte);
 
 	output_delegate             m_keyboard_cb;
 	required_ioport_array<12>   m_io_kbd_t;
 	u8                          m_io_kbd_state[12][8];
 
-	int m_x, m_y;
+	emu_timer *m_scan_timer;
+	emu_timer *m_first_byte_timer;
+	emu_timer *m_second_byte_timer;
+	int m_x;
+	int m_y;
 	u8 m_first_byte;
 	u8 m_second_byte;
 	u8 m_modifier_keys;
@@ -84,7 +83,7 @@ public:
 		 device_t *owner,
 		 u32 clock);
 private:
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 };
 
 class stepone_keyboard_device : public myb3k_keyboard_device
@@ -96,7 +95,7 @@ public:
 		 device_t *owner,
 		 u32 clock);
 private:
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 };
 
 #endif // MAME_MACHINE_MYB3K_KBD_H

@@ -41,6 +41,8 @@ General Debugger Commands
     save a screen snapshot
 :ref:`debugger-command-source`
     read commands from file and executes them one by one
+:ref:`debugger-command-time`
+    prints the current machine time to the console
 :ref:`debugger-command-quit`
     exit the debugger and end the emulation session
 
@@ -78,8 +80,8 @@ do
 
 The **do** command simply evaluates the supplied expression.  This is
 often used to set or modify device state variable (e.g. CPU registers),
-or to write to memory.  See :ref:`debugger-expressions` for details
-about expression syntax.
+or to write to memory.  See :ref:`debugger-express` for details about
+expression syntax.
 
 Examples:
 
@@ -188,15 +190,22 @@ available:
 
 %c
     Prints the corresponding argument as an 8-bit character.
-%[0][<n>]d
+%[-][0][<n>]d
     Prints the corresponding argument as a decimal number with optional
-    minimum field width and zero fill.
-%[0][<n>]o
+    left justification, zero fill and minimum field width.
+%[-][0][<n>]o
     Prints the corresponding argument as an octal number with optional
-    minimum field width and zero fill using lowercase letters.
-%[0][<n>]x
-    Prints the corresponding argument as a hexadecimal number with
-    optional minimum field width and zero fill using uppercase letters.
+    left justification, zero fill and minimum field width.
+%[-][0][<n>]x
+    Prints the corresponding argument as a lowercase hexadecimal number
+    with optional left justification, zero fill and minimum field width.
+%[-][0][<n>]X
+    Prints the corresponding argument as an uppercase hexadecimal number
+    with optional left justification, zero fill and minimum field width.
+%[-][<n>][.[<n>]]s
+    Prints a null-terminated string of 8-bit characters from the address
+    and address space given by the corresponding argument, with optional
+    left justification, minimum and maximum field widths.
 \%%
     Prints a literal percent symbol.
 \\n
@@ -540,6 +549,21 @@ Examples:
 
 ``source break_and_trace.cmd``
     Reads and executes debugger commands from **break_and_trace.cmd**.
+
+Back to :ref:`debugger-general-list`
+
+
+.. _debugger-command-time:
+
+time
+----
+
+Prints the total elapsed emulated time to the debugger console.
+
+Examples:
+
+``time``
+    Prints the elapsed emulated time.
 
 Back to :ref:`debugger-general-list`
 

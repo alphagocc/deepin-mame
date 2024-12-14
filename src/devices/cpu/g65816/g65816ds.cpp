@@ -15,7 +15,33 @@ All rights reserved.
 #include "emu.h"
 #include "g65816ds.h"
 
-g65816_disassembler::g65816_disassembler(config *conf) : m_config(conf)
+enum class g65816_disassembler::op : unsigned
+{
+	ADC,  AND,  ASL,  BCC,  BCS,  BEQ,  BIT,  BMI,  BNE,  BPL,  BRA,
+	BRK,  BRL,  BVC,  BVS,  CLC,  CLD,  CLI,  CLV,  CMP,  COP,  CPX,
+	CPY,  DEA,  DEC,  DEX,  DEY,  EOR,  INA,  INC,  INX,  INY,  JML,
+	JMP,  JSL,  JSR,  LDA,  LDX,  LDY,  LSR,  MVN,  MVP,  NOP,  ORA,
+	PEA,  PEI,  PER,  PHA,  PHB,  PHD,  PHK,  PHP,  PHX,  PHY,  PLA,
+	PLB,  PLD,  PLP,  PLX,  PLY,  REP,  ROL,  ROR,  RTI,  RTL,  RTS,
+	SBC,  SEC,  SED,  SEI,  SEP,  STA,  STP,  STX,  STY,  STZ,  TAX,
+	TAY,  TCS,  TCD,  TDC,  TRB,  TSB,  TSC,  TSX,  TXA,  TXS,  TXY,
+	TYA,  TYX,  WAI,  WDM,  XBA,  XCE
+};
+
+class g65816_disassembler::opcode_struct {
+	public:
+		op m_name;
+		u8 flag;
+		u8 ea;
+
+		opcode_struct(op n, u8 f, u8 e);
+		const char *name() const;
+		bool is_call() const;
+		bool is_return() const;
+		bool is_cond() const;
+	};
+
+g65816_disassembler::g65816_disassembler(const config *conf) : m_config(conf)
 {
 }
 
@@ -62,6 +88,11 @@ bool g65816_disassembler::opcode_struct::is_return() const
 	default:
 		return false;
 	}
+}
+
+bool g65816_disassembler::opcode_struct::is_cond() const
+{
+	return ea == RELB && m_name != op::BRA;
 }
 
 g65816_disassembler::opcode_struct::opcode_struct(op n, u8 f, u8 e) : m_name(n), flag(f), ea(e)
@@ -183,6 +214,8 @@ offs_t g65816_disassembler::disassemble(std::ostream &stream, offs_t pc, const d
 		dasm_flags = STEP_OVER;
 	else if (opcode->is_return())
 		dasm_flags = STEP_OUT;
+	else if (opcode->is_cond())
+		dasm_flags = STEP_COND;
 	else
 		dasm_flags = 0;
 

@@ -78,17 +78,20 @@ static const uint8_t fw_inc[32] = { 32,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17
 
 void tms340x0_device::unimpl(uint16_t op)
 {
-	/* kludge for Super High Impact -- this doesn't seem to cause */
-	/* an illegal opcode exception */
-	if (space(AS_PROGRAM).read_word(m_pc - 0x10) == 0x0007)
-		return;
+	// Not all illegal opcodes cause TRAP 30 exceptions on TMS34010, and some games only work because of this:
 
-	/* 9 Ball Shootout calls to FFDF7468, expecting it */
-	/* to execute the next instruction from FFDF7470 */
-	/* but the instruction at FFDF7460 is an 0x0001 */
-	if (space(AS_PROGRAM).read_word(m_pc - 0x10) == 0x0001)
-		return;
+	// 9 Ball Shootout calls to FFDF7468, expecting it
+	// to execute the next instruction from FFDF7470
+	// but the instruction at FFDF7460 is an 0x0001
 
+	// Super High Impact executes 0x0007 at various entry points
+
+	logerror("TMS34010 reserved opcode %04Xh encountered at %08x\n", op, m_ppc);
+	COUNT_CYCLES(1);
+}
+
+void tms340x0_device::illop(uint16_t op)
+{
 	PUSH(m_pc);
 	PUSH(m_st);
 	RESET_ST();
@@ -96,13 +99,14 @@ void tms340x0_device::unimpl(uint16_t op)
 	COUNT_UNKNOWN_CYCLES(16);
 
 	/* extra check to prevent bad things */
+#if 0
 	if (m_pc == 0 || s_opcode_table[space(AS_PROGRAM).read_word(m_pc) >> 4] == &tms34010_device::unimpl)
 	{
 		set_input_line(INPUT_LINE_HALT, ASSERT_LINE);
 		machine().debug_break();
 	}
+#endif
 }
-
 
 
 /***************************************************************************
@@ -176,6 +180,7 @@ void tms340x0_device::cmp_xy_b(uint16_t op) { CMP_XY(B); }
 void tms340x0_device::cpw_a(uint16_t op) { CPW(A); }
 void tms340x0_device::cpw_b(uint16_t op) { CPW(B); }
 
+// TODO: Handle cycles properly, currently we assume power of two
 #define CVXYL(R)                                    \
 {                                                   \
 	R##REG(DSTREG(op)) = DXYTOL(R##REG_XY(SRCREG(op)));     \
@@ -521,8 +526,7 @@ void tms340x0_device::dint(uint16_t op)
 			int64_t dividend = ((uint64_t)*rd1 << 32) | (uint32_t)*rd2; \
 			int64_t quotient = dividend / *rs;                \
 			int32_t remainder = dividend % *rs;               \
-			uint32_t signbits = (int32_t)quotient >> 31;        \
-			if (extract_64hi(quotient) != signbits)         \
+			if ((int64_t)(int32_t)quotient != quotient)     \
 			{                                               \
 				SET_V_LOG(1);                              \
 			}                                               \
@@ -569,7 +573,7 @@ void tms340x0_device::divs_b(uint16_t op) { DIVS(B); }
 			uint64_t dividend  = ((uint64_t)*rd1 << 32) | (uint32_t)*rd2; \
 			uint64_t quotient  = dividend / (uint32_t)*rs;      \
 			uint32_t remainder = dividend % (uint32_t)*rs;      \
-			if (extract_64hi(quotient) != 0)                \
+			if (quotient > 0xffffffff)                      \
 			{                                               \
 				SET_V_LOG(1);                              \
 			}                                               \
@@ -736,8 +740,8 @@ void tms340x0_device::modu_b(uint16_t op) { MODU(B); }
 	SET_Z_LOG(product == 0);                                   \
 	SET_N_BIT(product >> 32, 31);                              \
 																\
-	*rd1             = extract_64hi(product);                       \
-	R##REG(DSTREG(op)|1) = extract_64lo(product);                       \
+	*rd1             = (int32_t)(product >> 32);                \
+	R##REG(DSTREG(op)|1) = product & 0xffffffff;                \
 																\
 	COUNT_CYCLES(20);                                           \
 }
@@ -755,8 +759,8 @@ void tms340x0_device::mpys_b(uint16_t op) { MPYS(B); }
 	product = mulu_32x32(m1, *rd1);                     \
 	SET_Z_LOG(product == 0);                                   \
 																\
-	*rd1             = extract_64hi(product);                       \
-	R##REG(DSTREG(op)|1) = extract_64lo(product);                       \
+	*rd1             = (int32_t)(product >> 32);                \
+	R##REG(DSTREG(op)|1) = product & 0xffffffff;                \
 																\
 	COUNT_CYCLES(21);                                           \
 }
@@ -2031,24 +2035,20 @@ New 34020 ops:
 	SET_V_BIT_LO(b->x, 15);                        \
 	COUNT_CYCLES(1);                            \
 }
-void tms340x0_device::addxyi_a(uint16_t op)
+void tms34020_device::addxyi_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	ADD_XYI(A);
 }
-void tms340x0_device::addxyi_b(uint16_t op)
+void tms34020_device::addxyi_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	ADD_XYI(B);
 }
 
-void tms340x0_device::blmove(uint16_t op)
+void tms34020_device::blmove(uint16_t op)
 {
 	offs_t src = BREG(0);
 	offs_t dst = BREG(2);
 	offs_t bits = BREG(7);
-
-	if (!m_is_34020) { unimpl(op); return; }
 
 	bool S = op & (1 << 1);
 	bool D = op & (1 << 0);
@@ -2092,21 +2092,18 @@ void tms340x0_device::blmove(uint16_t op)
 		m_pc -= 0x10;
 }
 
-void tms340x0_device::cexec_l(uint16_t op)
+void tms34020_device::cexec_l(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cexec_l\n");
 }
 
-void tms340x0_device::cexec_s(uint16_t op)
+void tms34020_device::cexec_s(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cexec_s\n");
 }
 
-void tms340x0_device::clip(uint16_t op)
+void tms34020_device::clip(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	XY daddr = DADDR_XY();
 	XY wstart = WSTART_XY();
 	XY wend = WEND_XY();
@@ -2121,7 +2118,7 @@ void tms340x0_device::clip(uint16_t op)
 	bool is_b = wend.y > daddr.y;
 	if (!(is_l || is_r || is_t || is_b))
 	{
-		// ...no itersection, set flags and return
+		// ...no intersection, set flags and return
 		m_st |= STBIT_Z | STBIT_V;
 		// TODO: manual does not specify cycles, only states that this is complex instruction
 		COUNT_CYCLES(3);
@@ -2163,75 +2160,63 @@ void tms340x0_device::clip(uint16_t op)
 	COUNT_CYCLES(3);
 }
 
-void tms340x0_device::cmovcg_a(uint16_t op)
+void tms34020_device::cmovcg_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovcg_a\n");
 }
 
-void tms340x0_device::cmovcg_b(uint16_t op)
+void tms34020_device::cmovcg_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovcg_b\n");
 }
 
-void tms340x0_device::cmovcm_f(uint16_t op)
+void tms34020_device::cmovcm_f(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovcm_f\n");
 }
 
-void tms340x0_device::cmovcm_b(uint16_t op)
+void tms34020_device::cmovcm_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovcm_b\n");
 }
 
-void tms340x0_device::cmovgc_a(uint16_t op)
+void tms34020_device::cmovgc_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovgc_a\n");
 }
 
-void tms340x0_device::cmovgc_b(uint16_t op)
+void tms34020_device::cmovgc_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovgc_b\n");
 }
 
-void tms340x0_device::cmovgc_a_s(uint16_t op)
+void tms34020_device::cmovgc_a_s(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovgc_a_s\n");
 }
 
-void tms340x0_device::cmovgc_b_s(uint16_t op)
+void tms34020_device::cmovgc_b_s(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovgc_b_s\n");
 }
 
-void tms340x0_device::cmovmc_f(uint16_t op)
+void tms34020_device::cmovmc_f(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovmc_f\n");
 }
 
-void tms340x0_device::cmovmc_f_va(uint16_t op)
+void tms34020_device::cmovmc_f_va(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovmc_f_va\n");
 }
 
-void tms340x0_device::cmovmc_f_vb(uint16_t op)
+void tms34020_device::cmovmc_f_vb(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovmc_f_vb\n");
 }
 
-void tms340x0_device::cmovmc_b(uint16_t op)
+void tms34020_device::cmovmc_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cmovmc_b\n");
 }
 
@@ -2245,127 +2230,133 @@ void tms340x0_device::cmovmc_b(uint16_t op)
 	SET_NZCV_SUB(*rd,t,r);                                  \
 	COUNT_CYCLES(1);                                        \
 }
-void tms340x0_device::cmp_k_a(uint16_t op)
+void tms34020_device::cmp_k_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	CMPK(A);
 }
-void tms340x0_device::cmp_k_b(uint16_t op)
+void tms34020_device::cmp_k_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	CMPK(B);
 }
 
-void tms340x0_device::cvdxyl_a(uint16_t op)
+void tms34020_device::cvdxyl_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cvdxyl_a\n");
 }
 
-void tms340x0_device::cvdxyl_b(uint16_t op)
+void tms34020_device::cvdxyl_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
-	logerror("020:cvdxyl_b\n");
+	// Convert destination XY address to linear
+	// (Y half of Rd x DPTCH) + (X half of Rd x PSIZE) + (A4 or B4) ->  Rd
+	const XY rd = BREG_XY(DSTREG(op));
+	const off_t dptch = DPTCH();
+	const off_t offset = BREG(4);
+
+	const off_t result = (rd.y * dptch) + (rd.x << m_pixelshift) + offset;
+	// logerror("020:cvdxyl_b: PC=0x%08x: DADDR=%x, x=%x, y=%x, DPTCH=%d, PIXELSIZE=%d, OFFSET=%d, result: %x\n",
+	// m_pc, rd, rd.x, rd.y, dptch, m_pixelshift, offset, result);
+
+	DADDR() = result;
+
+	// Handle cycles related to pitch:
+	switch (population_count_32(dptch))
+	{
+		// power of 2: 2 clocks
+		case 1:
+			COUNT_CYCLES(2);
+			break;
+		// 2 powers of 2: 3 clocks
+		case 2:
+			COUNT_CYCLES(3);
+			break;
+		// arbitrary: 14 clocks
+		default:
+			COUNT_CYCLES(14);
+			break;
+	}
 }
 
-void tms340x0_device::cvmxyl_a(uint16_t op)
+void tms34020_device::cvmxyl_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cvmxyl_a\n");
 }
 
-void tms340x0_device::cvmxyl_b(uint16_t op)
+void tms34020_device::cvmxyl_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cvmxyl_b\n");
 }
 
-void tms340x0_device::cvsxyl_a(uint16_t op)
+void tms34020_device::cvsxyl_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cvsxyl_a\n");
 }
 
-void tms340x0_device::cvsxyl_b(uint16_t op)
+void tms34020_device::cvsxyl_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:cvsxyl_b\n");
 }
 
-void tms340x0_device::exgps_a(uint16_t op)
+void tms34020_device::exgps_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:exgps_a\n");
 }
 
-void tms340x0_device::exgps_b(uint16_t op)
+void tms34020_device::exgps_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:exgps_b\n");
 }
 
-void tms340x0_device::fline(uint16_t op)
+void tms34020_device::fline(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:fline\n");
 }
 
-void tms340x0_device::fpixeq(uint16_t op)
+void tms34020_device::fpixeq(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:fpixeq\n");
 }
 
-void tms340x0_device::fpixne(uint16_t op)
+void tms34020_device::fpixne(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:fpixne\n");
 }
 
-void tms340x0_device::getps_a(uint16_t op)
+void tms34020_device::getps_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:getps_a\n");
 }
 
-void tms340x0_device::getps_b(uint16_t op)
+void tms34020_device::getps_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:getps_b\n");
 }
 
-void tms340x0_device::idle(uint16_t op)
+void tms34020_device::idle(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:idle\n");
 }
 
-void tms340x0_device::linit(uint16_t op)
+void tms34020_device::linit(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:linit\n");
 }
 
-void tms340x0_device::mwait(uint16_t op)
+void tms34020_device::mwait(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 }
 
-void tms340x0_device::pfill_xy(uint16_t op)
+void tms34020_device::pfill_xy(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:pfill_xy\n");
 }
 
-void tms340x0_device::pixblt_l_m_l(uint16_t op)
+void tms34020_device::pixblt_l_m_l(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:pixblt_l_m_l\n");
 }
 
-void tms340x0_device::retm(uint16_t op)
+void tms34020_device::retm(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:retm\n");
 }
 
@@ -2388,8 +2379,8 @@ void tms340x0_device::retm(uint16_t op)
 	COUNT_CYCLES(1);                                            \
 }
 
-void tms340x0_device::rmo_a(uint16_t op) { RMO(A); }
-void tms340x0_device::rmo_b(uint16_t op) { RMO(B); }
+void tms34020_device::rmo_a(uint16_t op) { RMO(A); }
+void tms34020_device::rmo_b(uint16_t op) { RMO(B); }
 
 #define RPIX(R)                                 \
 {                                               \
@@ -2433,27 +2424,24 @@ void tms340x0_device::rmo_b(uint16_t op) { RMO(B); }
 	R##REG(DSTREG(op)) = v;                         \
 }
 
-void tms340x0_device::rpix_a(uint16_t op)
+void tms34020_device::rpix_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	RPIX(A);
 }
 
-void tms340x0_device::rpix_b(uint16_t op)
+void tms34020_device::rpix_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	RPIX(B);
 }
 
-void tms340x0_device::setcdp(uint16_t op)
+void tms34020_device::setcdp(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	off_t dptch = DPTCH();
 
 	// Check whether we're dealing with an even number
 	if ((dptch & 1) == 0)
 	{
-		switch(population_count_32(dptch))
+		switch (population_count_32(dptch))
 		{
 			// .. only single bit set, pitch is power of two!
 			case 1:
@@ -2480,56 +2468,53 @@ void tms340x0_device::setcdp(uint16_t op)
 	COUNT_CYCLES(3);
 }
 
-void tms340x0_device::setcmp(uint16_t op)
+void tms34020_device::setcmp(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:setcmp\n");
 }
 
-void tms340x0_device::setcsp(uint16_t op)
+void tms34020_device::setcsp(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:setcsp\n");
 }
 
-void tms340x0_device::swapf_a(uint16_t op)
+void tms34020_device::swapf_a(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:swapf_a\n");
 }
 
-void tms340x0_device::swapf_b(uint16_t op)
+void tms34020_device::swapf_b(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:swapf_b\n");
 }
 
-void tms340x0_device::tfill_xy(uint16_t op)
+void tms34020_device::tfill_xy(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:tfill_xy\n");
 }
 
-void tms340x0_device::trapl(uint16_t op)
+void tms34020_device::trapl(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
 	logerror("020:trapl\n");
 }
 
-void tms340x0_device::vblt_b_l(uint16_t op)
+void tms34020_device::vblt_b_l(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
+	// Linear VRAM pixel block transfer
+	// logerror("020:vblt_b_l: SADDR=0x%x, SPTCH=%d, DADDR=0x%x, DPTCH=%d, DYDX=(%dx%d), TEMP=%x\n", SADDR(), SPTCH(), DADDR(), DPTCH(), DYDX_X(), DYDX_Y(), TEMP());
 	logerror("020:vblt_b_l\n");
 }
 
-void tms340x0_device::vfill_l(uint16_t op)
+void tms34020_device::vfill_l(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
+	// Linear VRAM fast fill
+	// logerror("020:vfill_l: DADDR=0x%x, DPTCH=%d, DYDX=(%dx%d)\n", DADDR(), DPTCH(), DYDX_X(), DYDX_Y());
 	logerror("020:vfill_l\n");
 }
 
-void tms340x0_device::vlcol(uint16_t op)
+void tms34020_device::vlcol(uint16_t op)
 {
-	if (!m_is_34020) { unimpl(op); return; }
+	// Latch COLOR1 into the VRAM color registers
+	//logerror("020:vlcol: COLOR1=%x\n", COLOR1());
 	logerror("020:vlcol\n");
 }

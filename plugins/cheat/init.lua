@@ -73,6 +73,8 @@ exports.author = { name = "Carl" }
 
 local cheat = exports
 
+local reset_subscription, stop_subscription, frame_subscription
+
 function cheat.set_folder(path)
 	cheat.path = path
 end
@@ -130,7 +132,7 @@ function cheat.startplugin()
 
 	local function load_hotkeys()
 		local json = require("json")
-		local file = io.open(emu.subst_env(manager.machine.options.entries.cheatpath:value():match("([^;]+)")) .. "/" .. cheatname .. "_hotkeys.json", "r")
+		local file = io.open(manager.machine.options.entries.cheatpath:value():match("([^;]+)") .. "/" .. cheatname .. "_hotkeys.json", "r")
 		if not file then
 			return
 		end
@@ -154,9 +156,10 @@ function cheat.startplugin()
 				end
 			end
 		end
+		local path = manager.machine.options.entries.cheatpath:value():match("([^;]+)")
+		local filepath = path .. "/" .. cheatname .. "_hotkeys.json"
 		if #hotkeys > 0 then
 			local json = require("json")
-			local path = emu.subst_env(manager.machine.options.entries.cheatpath:value():match("([^;]+)"))
 			local attr = lfs.attributes(path)
 			if not attr then
 				lfs.mkdir(path)
@@ -165,7 +168,7 @@ function cheat.startplugin()
 			end
 			if cheatname:find("/", 1, true) then
 				local softpath = path .. "/" .. cheatname:match("([^/]+)")
-				local attr = lfs.attributes(softpath)
+				attr = lfs.attributes(softpath)
 				if not attr then
 					lfs.mkdir(softpath)
 				elseif attr.mode ~= "directory" then -- uhhh?
@@ -173,10 +176,20 @@ function cheat.startplugin()
 				end
 			end
 
-			local file = io.open(path .. "/" .. cheatname .. "_hotkeys.json", "w+")
+			local file = io.open(filepath, "w+")
 			if file then
 				file:write(json.stringify(hotkeys, {indent = true}))
 				file:close()
+			end
+		else
+			local attr = lfs.attributes(filepath)
+			if attr and (attr.mode == "file") then
+				local json = require("json")
+				local file = io.open(filepath, "w+")
+				if file then
+					file:write(json.stringify(hotkeys, {indent = true}))
+					file:close()
+				end
 			end
 		end
 	end
@@ -440,21 +453,22 @@ function cheat.startplugin()
 	end
 
 	local function parse_cheat(cheat)
-		cheat.cheat_env = { draw_text = draw_text,
-					draw_line = draw_line,
-					draw_box = draw_box,
-					tobcd = tobcd,
-					frombcd = frombcd,
-					pairs = pairs,
-					ipairs = ipairs,
-					outputs = manager.machine.output,
-					time = time,
-					input_trans = input_trans,
-					input_run = function(list) input_run(cheat, list) end,
-					os = { time = os.time, date = os.date, difftime = os.difftime },
-					table =
-					{ insert = table.insert,
-						  remove = table.remove } }
+		cheat.cheat_env = {
+			draw_text = draw_text,
+			draw_line = draw_line,
+			draw_box = draw_box,
+			tobcd = tobcd,
+			frombcd = frombcd,
+			pairs = pairs,
+			ipairs = ipairs,
+			outputs = manager.machine.output,
+			time = time,
+			input_trans = input_trans,
+			input_run = function(list) input_run(cheat, list) end,
+			os = { time = os.time, date = os.date, difftime = os.difftime },
+			table = { insert = table.insert, remove = table.remove },
+			string = { format = string.format, char = string.char }
+		}
 		cheat.enabled = false
 		cheat.set_enabled = set_enabled;
 		cheat.get_enabled = function(cheat) return cheat.enabled end
@@ -522,7 +536,9 @@ function cheat.startplugin()
 		if cheat.screen then
 			for name, screen in pairs(cheat.screen) do
 				local scr = manager.machine.screens[screen]
-				if not scr then
+				if screen == "ui" then
+					scr = manager.machine.render.ui_container
+				elseif not scr then
 					local tag
 					local nxt, coll = manager.machine.screens:pairs()
 					tag, scr = nxt(coll) -- get any screen
@@ -597,58 +613,56 @@ function cheat.startplugin()
 
 	local hotkeymenu = false
 	local hotkeylist = {}
+	local commonui
+	local poller
 
 	local function menu_populate()
 		local menu = {}
 		if hotkeymenu then
 			local ioport = manager.machine.ioport
 			local input = manager.machine.input
+
 			menu[1] = {_("Select cheat to set hotkey"), "", "off"}
-			menu[2] = {string.format(_("Press %s to clear hotkey"), input:seq_name(ioport:type_seq(ioport:token_to_input_type("UI_CLEAR")))), "", "off"}
+			menu[2] = {string.format(_("Press %s to clear hotkey"), manager.ui:get_general_input_setting(ioport:token_to_input_type("UI_CLEAR"))), "", "off"}
 			menu[3] = {"---", "", "off"}
 			hotkeylist = {}
 
 			local function hkcbfunc(cheat, event)
-				if event == "clear" then
-					cheat.hotkeys = nil
-					return
-				end
-
-				local poller = input:switch_sequence_poller()
-				manager.machine:popmessage(_("Press button for hotkey or wait to leave unchanged"))
-				manager.machine.video:frame_update()
-				poller:start()
-				local time = os.clock()
-				local clearmsg = true
-				while (not poller:poll()) and (poller.modified or (os.clock() < time + 1)) do
-					if poller.modified then
-						if not poller.valid then
-							manager.machine:popmessage(_("Invalid sequence entered"))
-							clearmsg = false
-							break
+				if poller then
+					if poller:poll() then
+						if poller.sequence then
+							cheat.hotkeys = { pressed = false, keys = poller.sequence }
 						end
-						manager.machine:popmessage(input:seq_name(poller.sequence))
-						manager.machine.video:frame_update()
+						poller = nil
+						return true
 					end
+				elseif event == "clear" then
+					cheat.hotkeys = nil
+					return true
+				elseif event == "select" then
+					if not commonui then
+						commonui = require('commonui')
+					end
+					poller = commonui.switch_polling_helper()
+					return true
 				end
-				if poller.modified and poller.valid then
-					cheat.hotkeys = { pressed = false, keys = poller.sequence }
-				end
-				if clearmsg then
-					manager.machine:popmessage()
-				end
-				manager.machine.video:frame_update()
+				return false
 			end
 
 			for num, cheat in ipairs(cheats) do
 				if cheat.script then
-					menu[#menu + 1] = {cheat.desc, cheat.hotkeys and input:seq_name(cheat.hotkeys.keys) or _("None"), ""}
+					local setting = cheat.hotkeys and input:seq_name(cheat.hotkeys.keys) or _("None")
+					menu[#menu + 1] = {cheat.desc, setting, ""}
 					hotkeylist[#hotkeylist + 1] = function(event) return hkcbfunc(cheat, event) end
 				end
 			end
 			menu[#menu + 1] = {"---", "", ""}
 			menu[#menu + 1] = {_("Done"), "", ""}
-			return menu
+			if poller then
+				return poller:overlay(menu)
+			else
+				return menu
+			end
 		end
 		for num, cheat in ipairs(cheats) do
 			menu[num] = {}
@@ -662,7 +676,7 @@ function cheat.startplugin()
 					menu[num][3] = "off"
 				elseif cheat.is_oneshot then
 					menu[num][2] = _("Set")
-					menu[num][3] = 0
+					menu[num][3] = ""
 				else
 					if cheat.enabled then
 						menu[num][2] = _("On")
@@ -693,17 +707,20 @@ function cheat.startplugin()
 				end
 			end
 		end
-		menu[#menu + 1] = {"---", "", 0}
-		menu[#menu + 1] = {_("Set hotkeys"), "", 0}
-		menu[#menu + 1] = {_("Reset All"), "", 0}
-		menu[#menu + 1] = {_("Reload All"), "", 0}
+		menu[#menu + 1] = {"---", "", ""}
+		menu[#menu + 1] = {_("Set hotkeys"), "", ""}
+		menu[#menu + 1] = {_("Reset All"), "", ""}
+		menu[#menu + 1] = {_("Reload All"), "", ""}
 		return menu
 	end
 
 	local function menu_callback(index, event)
 		manager.machine:popmessage()
 		if hotkeymenu then
-			if event == "select" or event == "clear" then
+			if event == "back" then
+				hotkeymenu = false
+				return true
+			else
 				index = index - 3
 				if index >= 1 and index <= #hotkeylist then
 					hotkeylist[index](event)
@@ -712,9 +729,6 @@ function cheat.startplugin()
 					hotkeymenu = false
 					return true
 				end
-			elseif event == "cancel" then
-				hotkeymenu = false
-				return true
 			end
 			return false
 		end
@@ -798,7 +812,7 @@ function cheat.startplugin()
 				return menu_populate()
 			  end, _("Cheat"))
 
-	emu.register_start(function()
+	reset_subscription = emu.add_machine_reset_notifier(function ()
 		if not stop then
 			return
 		end
@@ -821,13 +835,13 @@ function cheat.startplugin()
 		end
 	end)
 
-	emu.register_stop(function()
+	stop_subscription = emu.add_machine_stop_notifier(function ()
 		stop = true
 		consolelog = nil
 		save_hotkeys()
 	end)
 
-	emu.register_frame(function()
+	frame_subscription = emu.add_machine_frame_notifier(function ()
 		if stop then
 			return
 		end

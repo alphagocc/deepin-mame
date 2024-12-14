@@ -2,7 +2,7 @@
 // basic_io_object.hpp
 // ~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -22,7 +22,6 @@
 
 namespace asio {
 
-#if defined(ASIO_HAS_MOVE)
 namespace detail
 {
   // Type trait used to determine whether a service supports move.
@@ -45,14 +44,13 @@ namespace detail
         static_cast<implementation_type*>(0))) == 1;
   };
 }
-#endif // defined(ASIO_HAS_MOVE)
 
 /// Base class for all I/O objects.
 /**
  * @note All I/O objects are non-copyable. However, when using C++0x, certain
  * I/O objects do support move construction and move assignment.
  */
-#if !defined(ASIO_HAS_MOVE) || defined(GENERATING_DOCUMENTATION)
+#if defined(GENERATING_DOCUMENTATION)
 template <typename IoObjectService>
 #else
 template <typename IoObjectService,
@@ -101,7 +99,7 @@ public:
   typedef asio::io_context::executor_type executor_type;
 
   /// Get the executor associated with the object.
-  executor_type get_executor() ASIO_NOEXCEPT
+  executor_type get_executor() noexcept
   {
     return service_.get_io_context().get_executor();
   }
@@ -138,6 +136,11 @@ protected:
    * @note Available only for services that support movability,
    */
   basic_io_object& operator=(basic_io_object&& other);
+
+  /// Perform a converting move-construction of a basic_io_object.
+  template <typename IoObjectService1>
+  basic_io_object(IoObjectService1& other_service,
+      typename IoObjectService1::implementation_type& other_implementation);
 #endif // defined(GENERATING_DOCUMENTATION)
 
   /// Protected destructor to prevent deletion through this type.
@@ -185,7 +188,6 @@ private:
   implementation_type implementation_;
 };
 
-#if defined(ASIO_HAS_MOVE)
 // Specialisation for movable objects.
 template <typename IoObjectService>
 class basic_io_object<IoObjectService, true>
@@ -208,7 +210,7 @@ public:
 
   typedef asio::io_context::executor_type executor_type;
 
-  executor_type get_executor() ASIO_NOEXCEPT
+  executor_type get_executor() noexcept
   {
     return service_->get_io_context().get_executor();
   }
@@ -224,6 +226,16 @@ protected:
     : service_(&other.get_service())
   {
     service_->move_construct(implementation_, other.implementation_);
+  }
+
+  template <typename IoObjectService1>
+  basic_io_object(IoObjectService1& other_service,
+      typename IoObjectService1::implementation_type& other_implementation)
+    : service_(&asio::use_service<IoObjectService>(
+          other_service.get_io_context()))
+  {
+    service_->converting_move_construct(implementation_,
+        other_service, other_implementation);
   }
 
   ~basic_io_object()
@@ -266,7 +278,6 @@ private:
   IoObjectService* service_;
   implementation_type implementation_;
 };
-#endif // defined(ASIO_HAS_MOVE)
 
 } // namespace asio
 

@@ -82,7 +82,7 @@ public:
 
 	template <typename... T> void set_lcd_update_cb(T &&... args) { m_lcd_update_func.set(std::forward<T>(args)...); }
 
-	void lc8670_internal_map(address_map &map);
+	void lc8670_internal_map(address_map &map) ATTR_COLD;
 protected:
 	enum
 	{
@@ -91,14 +91,12 @@ protected:
 	};
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	// device_execute_interface overrides
 	virtual uint32_t execute_min_cycles() const noexcept override { return 1; }
 	virtual uint32_t execute_max_cycles() const noexcept override { return 7; }
-	virtual uint32_t execute_input_lines() const noexcept override { return 4; }
 	virtual void execute_run() override;
 	virtual void execute_set_input(int inputnum, int state) override;
 
@@ -111,6 +109,9 @@ protected:
 
 	// device_disasm_interface overrides
 	virtual std::unique_ptr<util::disasm_interface> create_disassembler() override;
+
+	TIMER_CALLBACK_MEMBER(base_timer_update);
+	TIMER_CALLBACK_MEMBER(clock_timer_update);
 
 private:
 	// helpers
@@ -195,8 +196,6 @@ private:
 	memory_access< 8, 0, 0, ENDIANNESS_BIG>::specific m_io;      // I/O ports
 
 	// timers
-	static const device_timer_id BASE_TIMER = 1;
-	static const device_timer_id CLOCK_TIMER = 2;
 	emu_timer *           m_basetimer;
 	emu_timer *           m_clocktimer;
 

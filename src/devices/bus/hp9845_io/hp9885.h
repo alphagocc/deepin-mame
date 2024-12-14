@@ -29,16 +29,15 @@ public:
 	virtual uint8_t ext_status_r() const override;
 	virtual void output_w(uint16_t data) override;
 	virtual void ext_control_w(uint8_t data) override;
-	virtual DECLARE_WRITE_LINE_MEMBER(pctl_w) override;
-	virtual DECLARE_WRITE_LINE_MEMBER(io_w) override;
-	virtual DECLARE_WRITE_LINE_MEMBER(preset_w) override;
+	virtual void pctl_w(int state) override;
+	virtual void io_w(int state) override;
+	virtual void preset_w(int state) override;
 
 protected:
 	// device-level overrides
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 private:
 	// FSM states
@@ -56,7 +55,10 @@ private:
 		FSM_RD_ID,
 		FSM_WAIT_DATA_AM,
 		FSM_RD_DATA,
-		FSM_WR_DATA
+		FSM_WR_DATA,
+		FSM_WAIT_INDEX,
+		FSM_FORMATTING,
+		FSM_FORMAT_END
 	};
 
 	// Head states
@@ -72,7 +74,8 @@ private:
 		OP_READ,
 		OP_WRITE,
 		OP_STEP_IN,
-		OP_GET_STATUS
+		OP_GET_STATUS,
+		OP_FORMAT
 	};
 
 	required_device<floppy_connector> m_drive_connector;
@@ -95,6 +98,7 @@ private:
 	unsigned m_sector_cnt;
 	unsigned m_word_cnt;
 	unsigned m_rev_cnt;
+	unsigned m_format_track;
 	uint32_t m_am_detector;
 	uint16_t m_crc; // x^15 is stored in LSB
 
@@ -105,6 +109,10 @@ private:
 
 	// PLL
 	fdc_pll_t m_pll;
+
+	TIMER_CALLBACK_MEMBER(fsm_tick);
+	TIMER_CALLBACK_MEMBER(head_tick);
+	TIMER_CALLBACK_MEMBER(bit_byte_tick);
 
 	void floppy_ready_cb(floppy_image_device *floppy , int state);
 	void floppy_index_cb(floppy_image_device *floppy , int state);
@@ -122,6 +130,7 @@ private:
 	void start_rd();
 	void stop_rdwr();
 	uint16_t rd_word();
+	void wr_byte(uint8_t data, uint8_t clock);
 	void wr_word(uint16_t word);
 	void preset_crc();
 	void update_crc(bool bit);

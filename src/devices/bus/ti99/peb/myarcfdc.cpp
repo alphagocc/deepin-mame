@@ -28,17 +28,17 @@
 // ----------------------------------
 // Flags for debugging
 
-#define LOG_WARN        (1U<<1)    // Warnings
-#define LOG_CONFIG      (1U<<2)    // Configuration
-#define LOG_EPROM       (1U<<3)    // Access to EPROM
-#define LOG_CONTR       (1U<<4)    // Access to controller
-#define LOG_RAM         (1U<<5)    // Access to SRAM
-#define LOG_IRQ         (1U<<7)    // IRQ line
-#define LOG_DRQ         (1U<<8)    // DRQ line
-#define LOG_DRIVE       (1U<<9)    // Drive operations
-#define LOG_CRU         (1U<<10)   // CRU operations
+#define LOG_WARN        (1U << 1)    // Warnings
+#define LOG_CONFIG      (1U << 2)    // Configuration
+#define LOG_EPROM       (1U << 3)    // Access to EPROM
+#define LOG_CONTR       (1U << 4)    // Access to controller
+#define LOG_RAM         (1U << 5)    // Access to SRAM
+#define LOG_IRQ         (1U << 6)    // IRQ line
+#define LOG_DRQ         (1U << 7)    // DRQ line
+#define LOG_DRIVE       (1U << 8)    // Drive operations
+#define LOG_CRU         (1U << 9)    // CRU operations
 
-#define VERBOSE ( LOG_GENERAL | LOG_WARN | LOG_CONFIG )
+#define VERBOSE (LOG_GENERAL | LOG_WARN | LOG_CONFIG)
 #include "logmacro.h"
 
 #define BUFFER_TAG "ram"
@@ -64,6 +64,7 @@ myarc_fdc_device::myarc_fdc_device(const machine_config &mconfig, const char *ta
 	  m_buffer_ram(*this, BUFFER_TAG),
 	  m_pal(*this, PAL_TAG),
 	  m_dsrrom(nullptr),
+	  m_floppy(*this, "%u", 0),
 	  m_banksel(false),
 	  m_cardsel(false),
 	  m_selected_drive(0),
@@ -95,19 +96,23 @@ offs_t myarc_fdc_device::get_address()
 void myarc_fdc_device::debug_read(offs_t offset, uint8_t* value)
 {
 	offs_t addrcopy = m_address;
-	m_address = offset;
-	if (m_pal->ramsel())
-	{
-		*value = m_buffer_ram->pointer()[m_address & 0x07ff];
-	}
 
-	if (m_pal->romen())
+	if (!m_dec_high || amabc_is_set(offset))
 	{
-		// EPROM selected
-		offs_t base = m_banksel? 0x1000 : 0;
-		*value = m_dsrrom[base | (m_address & 0x0fff)];
+		m_address = offset;
+		if (m_pal->ramsel())
+		{
+			*value = m_buffer_ram->pointer()[m_address & 0x07ff];
+		}
+
+		if (m_pal->romen())
+		{
+			// EPROM selected
+			offs_t base = m_banksel? 0x1000 : 0;
+			*value = m_dsrrom[base | (m_address & 0x0fff)];
+		}
+		m_address = addrcopy;
 	}
-	m_address = addrcopy;
 }
 
 /*
@@ -116,12 +121,16 @@ void myarc_fdc_device::debug_read(offs_t offset, uint8_t* value)
 void myarc_fdc_device::debug_write(offs_t offset, uint8_t data)
 {
 	offs_t addrcopy = m_address;
-	m_address = offset;
-	if (m_pal->ramsel())
+
+	if (!m_dec_high || amabc_is_set(offset))
 	{
-		m_buffer_ram->pointer()[m_address & 0x07ff] = data;
+		m_address = offset;
+		if (m_pal->ramsel())
+		{
+			m_buffer_ram->pointer()[m_address & 0x07ff] = data;
+		}
+		m_address = addrcopy;
 	}
-	m_address = addrcopy;
 }
 
 /*
@@ -134,6 +143,9 @@ void myarc_fdc_device::readz(offs_t offset, uint8_t *value)
 		debug_read(offset, value);
 		return;
 	}
+
+	// If we have an AMA/B/C decoder and it delivers false, exit here
+	if (m_dec_high && !amabc_is_set(offset)) return;
 
 	if (m_pal->ramsel())
 	{
@@ -174,6 +186,9 @@ void myarc_fdc_device::write(offs_t offset, uint8_t data)
 		debug_write(offset, data);
 		return;
 	}
+
+	// If we have an AMA/B/C decoder and it delivers false, exit here
+	if (m_dec_high && !amabc_is_set(offset)) return;
 
 	if (m_pal->ramsel())
 	{
@@ -243,61 +258,61 @@ void myarc_fdc_device::cruwrite(offs_t offset, uint8_t data)
 /*
     Callbacks from the WDC chip
 */
-WRITE_LINE_MEMBER( myarc_fdc_device::fdc_irq_w )
+void myarc_fdc_device::fdc_irq_w(int state)
 {
 	LOGMASKED(LOG_IRQ, "INTRQ callback = %d\n", state);
 }
 
-WRITE_LINE_MEMBER( myarc_fdc_device::fdc_drq_w )
+void myarc_fdc_device::fdc_drq_w(int state)
 {
 	LOGMASKED(LOG_DRQ, "DRQ callback = %d\n", state);
 }
 
-WRITE_LINE_MEMBER( myarc_fdc_device::fdc_mon_w )
+void myarc_fdc_device::fdc_mon_w(int state)
 {
 	LOGMASKED(LOG_DRIVE, "MON callback = %d\n", state);
 	// All MON lines are connected
 	// Do not start the motors when no drive is selected. However, motors
 	// can always be stopped.
 	if (m_selected_drive != 0 || state==1)
-		for (int i=0; i < 3; i++)
-			if (m_floppy[i] != nullptr) m_floppy[i]->mon_w(state);
+		for (auto &flop : m_floppy)
+			if (flop->get_device() != nullptr) flop->get_device()->mon_w(state);
 }
 
 /*
     Callbacks from the 74LS259 latch
 */
-WRITE_LINE_MEMBER( myarc_fdc_device::den_w )
+void myarc_fdc_device::den_w(int state)
 {
 	LOGMASKED(LOG_CRU, "Card enable = %d\n", state);
 	m_cardsel = (state==1);
 }
 
-WRITE_LINE_MEMBER( myarc_fdc_device::wdreset_w )
+void myarc_fdc_device::wdreset_w(int state)
 {
 	LOGMASKED(LOG_CRU, "Controller reset = %d\n", state);
 	m_wdc->mr_w(state);
 }
 
-WRITE_LINE_MEMBER( myarc_fdc_device::sidsel_w )
+void myarc_fdc_device::sidsel_w(int state)
 {
 	LOGMASKED(LOG_CRU, "Side select = %d\n", state);
 	if (m_selected_drive != 0)
 	{
 		LOGMASKED(LOG_DRIVE, "Set side = %d on DSK%d\n", state, m_selected_drive);
-		m_floppy[m_selected_drive-1]->ss_w(state);
+		m_floppy[m_selected_drive-1]->get_device()->ss_w(state);
 	}
 }
 
 // Selects the EPROM bank, and also controls the DDEN line
-WRITE_LINE_MEMBER( myarc_fdc_device::bankdden_w )
+void myarc_fdc_device::bankdden_w(int state)
 {
 	LOGMASKED(LOG_CRU, "EPROM bank select = %d\n", state);
 	m_banksel = (state==ASSERT_LINE);
 	m_wdc->dden_w(state==1);
 }
 
-WRITE_LINE_MEMBER( myarc_fdc_device::drivesel_w )
+void myarc_fdc_device::drivesel_w(int state)
 {
 	int driveno = 0;
 
@@ -321,12 +336,12 @@ WRITE_LINE_MEMBER( myarc_fdc_device::drivesel_w )
 	}
 	else
 	{
-		if (m_floppy[driveno-1] != nullptr)
+		if (m_floppy[driveno-1]->get_device() != nullptr)
 		{
 			m_selected_drive = driveno;
 			LOGMASKED(LOG_DRIVE, "Select drive DSK%d\n", driveno);
-			m_wdc->set_floppy(m_floppy[driveno-1]);
-			m_floppy[driveno-1]->ss_w(m_drivelatch->q2_r());
+			m_wdc->set_floppy(m_floppy[driveno-1]->get_device());
+			m_floppy[driveno-1]->get_device()->ss_w(m_drivelatch->q2_r());
 		}
 	}
 }
@@ -342,21 +357,22 @@ void myarc_fdc_device::device_start()
 
 void myarc_fdc_device::device_reset()
 {
+	for (auto &flop : m_floppy)
+	{
+		if (flop->get_device() != nullptr)
+			LOGMASKED(LOG_CONFIG, "Connector %d with %s\n", flop->basetag(), flop->get_device()->name());
+		else
+			LOGMASKED(LOG_CONFIG, "Connector %d has no floppy attached\n", flop->basetag());
+	}
+
 	if (ioport("CONTROLLER")->read()==0)
 		m_wdc = m_wd1770;
 	else
 		m_wdc = m_wd1772;
-}
 
-void myarc_fdc_device::device_config_complete()
-{
-	for (auto & elem : m_floppy)
-		elem = nullptr;
+	m_dec_high = (ioport("AMADECODE")->read()!=0);
 
-	if (subdevice("0")!=nullptr) m_floppy[0] = static_cast<floppy_image_device*>(subdevice("0")->subdevices().first());
-	if (subdevice("1")!=nullptr) m_floppy[1] = static_cast<floppy_image_device*>(subdevice("1")->subdevices().first());
-	if (subdevice("2")!=nullptr) m_floppy[2] = static_cast<floppy_image_device*>(subdevice("2")->subdevices().first());
-	if (subdevice("3")!=nullptr) m_floppy[3] = static_cast<floppy_image_device*>(subdevice("3")->subdevices().first());
+	m_pal->set_board(this);
 }
 
 void myarc_fdc_device::floppy_formats(format_registration &fr)
@@ -366,7 +382,7 @@ void myarc_fdc_device::floppy_formats(format_registration &fr)
 	fr.add(FLOPPY_TI99_TDF_FORMAT);
 }
 
-static void ccfdc_floppies(device_slot_interface &device)
+static void myarc_ddcc_floppies(device_slot_interface &device)
 {
 	device.option_add("525dd", FLOPPY_525_DD);  // 40 tracks
 	device.option_add("525qd", FLOPPY_525_QD);  // 80 tracks
@@ -397,6 +413,11 @@ INPUT_PORTS_START(myarc_ddcc )
 	PORT_DIPNAME( 0x08, 0x00, "DSK4 head step time" )
 		PORT_DIPSETTING( 0x00, "6ms")
 		PORT_DIPSETTING( 0x08, "20ms/2ms")
+
+	PORT_START( "AMADECODE" )
+	PORT_CONFNAME( 0x01, 0x01, "Decode AMA/AMB/AMC lines" )
+		PORT_CONFSETTING( 0x00, DEF_STR( Off ))
+		PORT_CONFSETTING( 0x01, DEF_STR( On ))
 INPUT_PORTS_END
 
 
@@ -438,10 +459,10 @@ void myarc_fdc_device::device_add_mconfig(machine_config& config)
 	DDCC1_PAL(config, PAL_TAG, 0);
 
 	// Floppy drives
-	FLOPPY_CONNECTOR(config, "0", ccfdc_floppies, "525dd", myarc_fdc_device::floppy_formats).enable_sound(true);
-	FLOPPY_CONNECTOR(config, "1", ccfdc_floppies, "525dd", myarc_fdc_device::floppy_formats).enable_sound(true);
-	FLOPPY_CONNECTOR(config, "2", ccfdc_floppies, nullptr, myarc_fdc_device::floppy_formats).enable_sound(true);
-	FLOPPY_CONNECTOR(config, "3", ccfdc_floppies, nullptr, myarc_fdc_device::floppy_formats).enable_sound(true);
+	FLOPPY_CONNECTOR(config, m_floppy[0], myarc_ddcc_floppies, "525dd", myarc_fdc_device::floppy_formats).enable_sound(true);
+	FLOPPY_CONNECTOR(config, m_floppy[1], myarc_ddcc_floppies, "525dd", myarc_fdc_device::floppy_formats).enable_sound(true);
+	FLOPPY_CONNECTOR(config, m_floppy[2], myarc_ddcc_floppies, nullptr, myarc_fdc_device::floppy_formats).enable_sound(true);
+	FLOPPY_CONNECTOR(config, m_floppy[3], myarc_ddcc_floppies, nullptr, myarc_fdc_device::floppy_formats).enable_sound(true);
 }
 
 ioport_constructor myarc_fdc_device::device_input_ports() const
@@ -489,11 +510,6 @@ bool ddcc1_pal_device::cs251()
 bool ddcc1_pal_device::cs259()
 {
 	return ((m_board->get_address() & 0xff00)==0x1100);
-}
-
-void ddcc1_pal_device::device_config_complete()
-{
-	m_board = static_cast<myarc_fdc_device*>(owner());
 }
 
 } // end namespace bus::ti99::peb

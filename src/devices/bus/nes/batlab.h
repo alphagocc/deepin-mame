@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders: kmg, Fabio Priuli
+// copyright-holders:kmg
 #ifndef MAME_BUS_NES_BATLAB_H
 #define MAME_BUS_NES_BATLAB_H
 
@@ -35,12 +35,12 @@ public:
 	virtual u8 read_h(offs_t offset) override;
 	virtual void write_h(offs_t offset, u8 data) override;
 
-	virtual void hblank_irq(int scanline, int vblank, int blanked) override;
+	virtual void hblank_irq(int scanline, bool vblank, bool blanked) override;
 	virtual void pcb_reset() override;
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 private:
 	u8 read_dpcm();

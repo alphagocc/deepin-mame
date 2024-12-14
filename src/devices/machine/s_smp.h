@@ -28,10 +28,11 @@ public:
 
 protected:
 	tiny_rom_entry const *device_rom_region() const override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual void device_clock_changed() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+
+	TIMER_CALLBACK_MEMBER(update_timers);
 
 	// device_memory_interface configuration
 	virtual space_config_vector memory_space_config() const override;
@@ -56,10 +57,6 @@ private:
 	u8 io_r(offs_t offset);
 	void io_w(offs_t offset, u8 data);
 
-	enum
-	{
-		TIMER_TICK_ID = 1
-	};
 	/* timers */
 	emu_timer             *m_tick_timer;
 	bool                  m_timer_enabled[3];
@@ -81,7 +78,7 @@ private:
 	devcb_read8           m_dsp_io_r_cb;
 	devcb_write8          m_dsp_io_w_cb;
 
-	void internal_map(address_map &map);
+	void internal_map(address_map &map) ATTR_COLD;
 };
 
 DECLARE_DEVICE_TYPE(S_SMP, s_smp_device)

@@ -126,16 +126,17 @@
 #include "emu.h"
 #include "horizon.h"
 
-#define LOG_WARN        (1U<<1)   // Warnings
-#define LOG_CONFIG      (1U<<2)   // Configuration
-#define LOG_32K         (1U<<3)   // 32K optional RAM r/w
-#define LOG_DSR         (1U<<4)   // DSR
-#define LOG_RAM         (1U<<5)   // RAM chips
-#define LOG_ORAM        (1U<<6)   // outside of RAM chips
-#define LOG_CRU         (1U<<7)   // CRU
-#define LOG_PAGE        (1U<<8)   // Page access
+#define LOG_WARN        (1U << 1)   // Warnings
+#define LOG_CONFIG      (1U << 2)   // Configuration
+#define LOG_32K         (1U << 3)   // 32K optional RAM r/w
+#define LOG_DSR         (1U << 4)   // DSR
+#define LOG_RAM         (1U << 5)   // RAM chips
+#define LOG_ORAM        (1U << 6)   // outside of RAM chips
+#define LOG_CRU         (1U << 7)   // CRU
+#define LOG_PAGE        (1U << 8)   // Page access
+#define LOG_LINE        (1U << 9)   // Control lines (like RESET)
 
-#define VERBOSE ( LOG_GENERAL | LOG_CONFIG | LOG_WARN )
+#define VERBOSE (LOG_GENERAL | LOG_CONFIG | LOG_WARN)
 
 #include "logmacro.h"
 
@@ -167,6 +168,7 @@ horizon_ramdisk_device::horizon_ramdisk_device(const machine_config &mconfig, co
 	m_phoenix_split(false),
 	m_hideswitch(false),
 	m_rambo_supported(false),
+	m_reset_in(false),
 	m_modified(false),
 	m_page(0),
 	m_bank(0),
@@ -324,7 +326,6 @@ void horizon_ramdisk_device::read_write(offs_t offset, uint8_t *value, bool writ
 */
 void horizon_ramdisk_device::crureadz(offs_t offset, uint8_t *value)
 {
-	return;
 }
 
 /*
@@ -393,6 +394,20 @@ void horizon_ramdisk_device::get_address_prefix()
 	}
 }
 
+void horizon_ramdisk_device::reset_in(int state)
+{
+	m_reset_in = (state==ASSERT_LINE);
+
+	// While the hideswitch is on, the /RESET line is pulled down
+	if (!m_hideswitch)
+	{
+		LOGMASKED(LOG_LINE, "RESET line=%d\n", m_reset_in);
+		// Reset the 259 latches
+		m_crulatch_u3->clear(m_reset_in);
+		m_crulatch_u4->clear(m_reset_in);
+	}
+}
+
 void horizon_ramdisk_device::device_start(void)
 {
 	machine().save().register_postload(save_prepost_delegate(FUNC(horizon_ramdisk_device::get_address_prefix),this));
@@ -421,6 +436,11 @@ INPUT_CHANGED_MEMBER( horizon_ramdisk_device::hs_changed )
 	{
 		LOGMASKED(LOG_CONFIG, "Hideswitch changed to %d\n", newval);
 		m_hideswitch = (newval!=0);
+		if (!m_reset_in)
+		{
+			m_crulatch_u3->clear(m_hideswitch);
+			m_crulatch_u4->clear(m_hideswitch);
+		}
 	}
 	else
 	{
@@ -450,13 +470,10 @@ void horizon_ramdisk_device::nvram_default()
 }
 
 
-void horizon_ramdisk_device::nvram_read(emu_file &file)
+bool horizon_ramdisk_device::nvram_read(util::read_stream &file)
 {
 	int ramsize, dsrsize;
 	get_mem_size(ramsize, dsrsize);
-
-	if (file.size() != ramsize + dsrsize)
-		LOGMASKED(LOG_WARN, "NVRAM file size (%d) does not match the current configuration. Check settings.\n", file.size());
 
 	// NVRAM plus ROS, according to the current configuration
 	auto buffer = make_unique_clear<uint8_t []>(ramsize + dsrsize);
@@ -466,8 +483,10 @@ void horizon_ramdisk_device::nvram_read(emu_file &file)
 
 	// Read complete file, at most ramsize+dsrsize
 	// Mind that the configuration may have changed
-	int filesize = file.read(&buffer[0], ramsize + dsrsize);
-	int nvramsize = filesize - dsrsize;
+	auto const [err, filesize] = util::read(file, &buffer[0], ramsize + dsrsize);
+	if (err)
+		return false;
+	int nvramsize = int(filesize) - dsrsize;
 
 	// At least the DSR must be complete
 	if (nvramsize >= 0)
@@ -475,10 +494,14 @@ void horizon_ramdisk_device::nvram_read(emu_file &file)
 		// Copy from buffer to NVRAM and ROS
 		if (nvramsize > 0) memcpy(m_ram->pointer(), &buffer[0], nvramsize);
 		memcpy(m_dsrram->pointer(), &buffer[nvramsize], dsrsize);
+
+		return true;
 	}
+
+	return false;
 }
 
-void horizon_ramdisk_device::nvram_write(emu_file &file)
+bool horizon_ramdisk_device::nvram_write(util::write_stream &file)
 {
 	int ramsize, dsrsize;
 	get_mem_size(ramsize, dsrsize);
@@ -490,10 +513,11 @@ void horizon_ramdisk_device::nvram_write(emu_file &file)
 	memcpy(&buffer[ramsize], m_dsrram->pointer(), dsrsize);
 
 	// Store both parts in one file
-	file.write(buffer.get(), ramsize + dsrsize);
+	auto const [err, filesize] = util::write(file, buffer.get(), ramsize + dsrsize);
+	return !err;
 }
 
-bool horizon_ramdisk_device::nvram_can_write()
+bool horizon_ramdisk_device::nvram_can_write() const
 {
 	// Do not save if nothing was written. This is helpful to avoid loss of the
 	// contents when the settings were found to be different, and the emulation
@@ -535,12 +559,12 @@ INPUT_PORTS_START( horizon )
 		PORT_DIPSETTING(    0x01, "Geneve mode" )
 
 	PORT_START( "HIDESW2" )
-	PORT_DIPNAME( 0x01, 0x00, "SW2 Hideswitch" ) PORT_CHANGED_MEMBER(DEVICE_SELF, horizon_ramdisk_device, hs_changed, 0)
+	PORT_DIPNAME( 0x01, 0x00, "SW2 Hideswitch" ) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(horizon_ramdisk_device::hs_changed), 0)
 		PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 		PORT_DIPSETTING(    0x01, DEF_STR( On ) )
 
 	PORT_START( "PHOENIX" )
-	PORT_DIPNAME( 0x01, 0x00, "JP2 Phoenix split" ) PORT_CHANGED_MEMBER(DEVICE_SELF, horizon_ramdisk_device, hs_changed, 1)
+	PORT_DIPNAME( 0x01, 0x00, "JP2 Phoenix split" ) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(horizon_ramdisk_device::hs_changed), 1)
 		PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 		PORT_DIPSETTING(    0x01, DEF_STR( On ) )
 

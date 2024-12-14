@@ -2,7 +2,7 @@
 // buffered_stream.cpp
 // ~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2016 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,6 +17,7 @@
 #include "asio/buffered_stream.hpp"
 
 #include <cstring>
+#include <functional>
 #include "archetypes/async_result.hpp"
 #include "asio/buffer.hpp"
 #include "asio/io_context.hpp"
@@ -29,12 +30,6 @@
 #else // defined(ASIO_HAS_BOOST_ARRAY)
 # include <array>
 #endif // defined(ASIO_HAS_BOOST_ARRAY)
-
-#if defined(ASIO_HAS_BOOST_BIND)
-# include <boost/bind.hpp>
-#else // defined(ASIO_HAS_BOOST_BIND)
-# include <functional>
-#endif // defined(ASIO_HAS_BOOST_BIND)
 
 typedef asio::buffered_stream<
     asio::ip::tcp::socket> stream_type;
@@ -84,14 +79,6 @@ void test_compile()
 
     stream_type::executor_type ex = stream1.get_executor();
     (void)ex;
-
-#if !defined(ASIO_NO_DEPRECATED)
-    io_context& ioc_ref = stream1.get_io_context();
-    (void)ioc_ref;
-
-    io_context& ioc_ref2 = stream1.get_io_service();
-    (void)ioc_ref2;
-#endif // !defined(ASIO_NO_DEPRECATED)
 
     stream_type::lowest_layer_type& lowest_layer = stream1.lowest_layer();
     (void)lowest_layer;
@@ -273,13 +260,9 @@ void test_async_operations()
 {
   using namespace std; // For memcmp.
 
-#if defined(ASIO_HAS_BOOST_BIND)
-  namespace bindns = boost;
-#else // defined(ASIO_HAS_BOOST_BIND)
   namespace bindns = std;
-  using std::placeholders::_1;
-  using std::placeholders::_2;
-#endif // defined(ASIO_HAS_BOOST_BIND)
+  using bindns::placeholders::_1;
+  using bindns::placeholders::_2;
 
   asio::io_context io_context;
 
@@ -366,7 +349,7 @@ void test_async_operations()
 ASIO_TEST_SUITE
 (
   "buffered_stream",
-  ASIO_TEST_CASE(test_compile)
+  ASIO_COMPILE_TEST_CASE(test_compile)
   ASIO_TEST_CASE(test_sync_operations)
   ASIO_TEST_CASE(test_async_operations)
 )

@@ -34,11 +34,11 @@ public:
 	void pulse_clock() override;
 
 protected:
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual ioport_constructor device_input_ports() const override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	TIMER_CALLBACK_MEMBER(delayed_data_ack);
 
 private:
 	static constexpr unsigned MAX_HANDSETS = 4;
@@ -48,6 +48,10 @@ private:
 	bool poll_keyboard(int num);
 	bool poll_joystick(int num);
 	void set_acknowledge(int data);
+
+	required_ioport_array<4> m_joyx;
+	required_ioport_array<4> m_joyy;
+	required_ioport_array<5> m_keys;
 
 	int     m_ack;
 	bool    m_clock_high;
@@ -65,19 +69,21 @@ class ti99_twin_joystick_device : public device_t, public device_ti99_joyport_in
 {
 public:
 	ti99_twin_joystick_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 	uint8_t read_dev() override;
 	void  write_dev(uint8_t data) override;
 
 protected:
-	virtual ioport_constructor device_input_ports() const override;
+	virtual ioport_constructor device_input_ports() const override ATTR_COLD;
 
 private:
 	// Which joystick is selected?
 	// In reality this is no latch but GND is put on one of the selector lines
 	// and then routed back to the port via the joystick
 	int m_joystick;
+
+	required_ioport_array<2> m_joys;
 };
 
 } // end namespace bus::ti99::joyport

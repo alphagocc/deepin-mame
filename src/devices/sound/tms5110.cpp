@@ -149,13 +149,10 @@ static int16_t clip_analog(int16_t cliptemp);
 
 void tms5110_device::new_int_write(uint8_t rc, uint8_t m0, uint8_t m1, uint8_t addr)
 {
-	if (!m_m0_cb.isnull())
-		m_m0_cb(m0);
-	if (!m_m1_cb.isnull())
-		m_m1_cb(m1);
-	if (!m_addr_cb.isnull())
-		m_addr_cb((offs_t)0, addr);
-	if (!m_romclk_cb.isnull())
+	m_m0_cb(m0);
+	m_m1_cb(m1);
+	m_addr_cb(offs_t(0), addr);
+	if (!m_romclk_cb.isunset())
 	{
 		//printf("rc %d\n", rc);
 		m_romclk_cb(rc);
@@ -176,7 +173,7 @@ uint8_t tms5110_device::new_int_read()
 	new_int_write(0, 1, 0, 0); // romclk 0, m0 1, m1 0, addr bus nybble = 0/open bus
 	new_int_write(1, 0, 0, 0); // romclk 1, m0 0, m1 0, addr bus nybble = 0/open bus
 	new_int_write(0, 0, 0, 0); // romclk 0, m0 0, m1 0, addr bus nybble = 0/open bus
-	if (!m_data_cb.isnull())
+	if (!m_data_cb.isunset())
 		return m_data_cb();
 	if (DEBUG_5110) logerror("WARNING: CALLBACK MISSING, RETURNING 0!\n");
 	return 0;
@@ -280,11 +277,11 @@ static void printbits(long data, int num)
 
 /******************************************************************************************
 
-     extract_bits -- extract a specific number of bits from the VSM
+     read_bits -- read a specific number of bits from the VSM
 
 ******************************************************************************************/
 
-int tms5110_device::extract_bits(int count)
+int tms5110_device::read_bits(int count)
 {
 	int val = 0;
 	if (DEBUG_5110) logerror("requesting %d bits", count);
@@ -849,7 +846,7 @@ void tms5110_device::PDC_set(int data)
 						fprintf(stderr,"actually reading a bit now\n");
 #endif
 						m_CTL_buffer >>= 1;
-						m_CTL_buffer |= (extract_bits(1)<<3);
+						m_CTL_buffer |= (read_bits(1)<<3);
 						m_CTL_buffer &= 0xF;
 					}
 					break;
@@ -927,7 +924,7 @@ void tms5110_device::parse_frame()
 	m_uv_zpar = m_zpar = 0;
 
 	// attempt to extract the energy index
-	m_new_frame_energy_idx = extract_bits(m_coeff->energy_bits);
+	m_new_frame_energy_idx = read_bits(m_coeff->energy_bits);
 #ifdef DEBUG_PARSE_FRAME_DUMP
 	printbits(m_new_frame_energy_idx,m_coeff->energy_bits);
 	fprintf(stderr," ");
@@ -937,13 +934,13 @@ void tms5110_device::parse_frame()
 	if ((m_new_frame_energy_idx == 0) || (m_new_frame_energy_idx == 15))
 		return;
 
-	rep_flag = extract_bits(1);
+	rep_flag = read_bits(1);
 #ifdef DEBUG_PARSE_FRAME_DUMP
 	printbits(rep_flag, 1);
 	fprintf(stderr," ");
 #endif
 
-	m_new_frame_pitch_idx = extract_bits(m_coeff->pitch_bits);
+	m_new_frame_pitch_idx = read_bits(m_coeff->pitch_bits);
 #ifdef DEBUG_PARSE_FRAME_DUMP
 	printbits(m_new_frame_pitch_idx,m_coeff->pitch_bits);
 	fprintf(stderr," ");
@@ -957,7 +954,7 @@ void tms5110_device::parse_frame()
 	// extract first 4 K coefficients
 	for (i = 0; i < 4; i++)
 	{
-		m_new_frame_k_idx[i] = extract_bits(m_coeff->kbits[i]);
+		m_new_frame_k_idx[i] = read_bits(m_coeff->kbits[i]);
 #ifdef DEBUG_PARSE_FRAME_DUMP
 		printbits(m_new_frame_k_idx[i],m_coeff->kbits[i]);
 		fprintf(stderr," ");
@@ -974,7 +971,7 @@ void tms5110_device::parse_frame()
 	// If we got here, we need the remaining 6 K's
 	for (i = 4; i < m_coeff->num_k; i++)
 	{
-		m_new_frame_k_idx[i] = extract_bits(m_coeff->kbits[i]);
+		m_new_frame_k_idx[i] = read_bits(m_coeff->kbits[i]);
 #ifdef DEBUG_PARSE_FRAME_DUMP
 		printbits(m_new_frame_k_idx[i],m_coeff->kbits[i]);
 		fprintf(stderr," ");
@@ -1040,18 +1037,11 @@ void tms5110_device::device_start()
 		fatalerror("Unknown variant in tms5110_create\n");
 	}
 
-	/* resolve lines */
-	m_m0_cb.resolve();
-	m_m1_cb.resolve();
-	m_romclk_cb.resolve();
-	m_addr_cb.resolve();
-	m_data_cb.resolve();
-
 	/* initialize a stream */
 	m_stream = stream_alloc(0, 1, clock() / 80);
 
 	m_state = CTL_STATE_INPUT; /* most probably not defined */
-	m_romclk_hack_timer = timer_alloc(0);
+	m_romclk_hack_timer = timer_alloc(FUNC(tms5110_device::romclk_hack_toggle), this);
 
 	register_for_save_states();
 }
@@ -1108,6 +1098,10 @@ void tms5110_device::device_reset()
 	m_next_is_address = false;
 	m_address = 0;
 	m_addr_bit = 0;
+
+	m_romclk_hack_timer->adjust(attotime::never);
+	m_romclk_hack_timer_started = false;
+	m_romclk_hack_state = false;
 }
 
 
@@ -1187,16 +1181,14 @@ uint8_t m58817_device::status_r()
 	return (TALK_STATUS() << 0); /*CTL1 = still talking ? */
 }
 
-/******************************************************************************
-
-     tms5110_romclk_hack_r -- read status of romclk
-
-******************************************************************************/
-
-void tms5110_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(tms5110_device::romclk_hack_toggle)
 {
 	m_romclk_hack_state = !m_romclk_hack_state;
 }
+
+//-------------------------------------------------
+//  romclk_hack_r - read status of romclk
+//-------------------------------------------------
 
 int tms5110_device::romclk_hack_r()
 {
@@ -1322,7 +1314,7 @@ void tmsprom_device::update_prom_cnt()
 		m_prom_cnt &= 0x0f;
 }
 
-void tmsprom_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(tmsprom_device::update_romclk)
 {
 	/* only 16 bytes needed ... The original dump is bad. This
 	 * is what is needed to get speech to work. The prom data has
@@ -1332,10 +1324,8 @@ void tmsprom_device::device_timer(emu_timer &timer, device_timer_id id, int para
 	 * static const int prom[16] = {0x00, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00,
 	 *              0x02, 0x00, 0x40, 0x00, 0x04, 0x06, 0x04, 0x84 };
 	 */
-	uint16_t ctrl;
-
 	update_prom_cnt();
-	ctrl = (m_prom[m_prom_cnt] | 0x200);
+	uint16_t ctrl = (m_prom[m_prom_cnt] | 0x200);
 
 	//if (m_enable && m_prom_cnt < 0x10) printf("ctrl %04x, enable %d cnt %d\n", ctrl, m_enable, m_prom_cnt);
 	m_prom_cnt = ((m_prom_cnt + 1) & 0x0f) | (m_prom_cnt & 0x10);
@@ -1355,11 +1345,7 @@ void tmsprom_device::device_timer(emu_timer &timer, device_timer_id id, int para
 
 void tmsprom_device::device_start()
 {
-	/* resolve lines */
-	m_pdc_cb.resolve_safe();
-	m_ctl_cb.resolve_safe();
-
-	m_romclk_timer = timer_alloc(0);
+	m_romclk_timer = timer_alloc(FUNC(tmsprom_device::update_romclk), this);
 	m_romclk_timer->adjust(attotime::zero, 0, attotime::from_hz(clock()));
 
 	m_bit = 0;
@@ -1450,7 +1436,7 @@ tms5110_device::tms5110_device(const machine_config &mconfig, device_type type, 
 	, m_m0_cb(*this)
 	, m_m1_cb(*this)
 	, m_addr_cb(*this)
-	, m_data_cb(*this)
+	, m_data_cb(*this, 0)
 	, m_romclk_cb(*this)
 {
 }

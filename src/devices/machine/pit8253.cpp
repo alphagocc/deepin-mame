@@ -21,7 +21,7 @@
  *****************************************************************************/
 
 #include "emu.h"
-#include "machine/pit8253.h"
+#include "pit8253.h"
 
 
 /***************************************************************************
@@ -98,7 +98,6 @@ void pit8253_device::device_resolve_objects()
 {
 	for (int timer = 0; timer < 3; timer++)
 	{
-		m_out_handler[timer].resolve_safe();
 		m_counter[timer]->m_index = timer;
 		m_counter[timer]->m_clockin = m_clk[timer];
 		m_counter[timer]->m_clock_period = (m_clk[timer] != 0) ? attotime::from_hz(m_clk[timer]) : attotime::never;
@@ -112,8 +111,8 @@ void pit8253_device::device_resolve_objects()
 
 void pit_counter_device::device_start()
 {
-	/* initialize timer */
-	m_updatetimer = timer_alloc(TID_UPDATE);
+	/* initialize timers */
+	m_update_timer = timer_alloc(FUNC(pit_counter_device::update_tick), this);
 	adjust_timer(attotime::never);
 
 	/* set up state save values */
@@ -204,7 +203,7 @@ inline void pit_counter_device::adjust_timer(attotime target)
 //  if (target != m_next_update)
 	{
 		m_next_update = target;
-		m_updatetimer->adjust(target - machine().time());
+		m_update_timer->adjust(target - machine().time());
 	}
 }
 
@@ -293,9 +292,6 @@ void pit_counter_device::load_counter_value()
 {
 	m_value = m_count;
 	m_null_count = 0;
-
-	if (CTRL_MODE(m_control) == 3 && m_output == 0)
-		m_value &= 0xfffe;
 }
 
 
@@ -507,7 +503,7 @@ void pit_counter_device::simulate(int64_t elapsed_cycles)
 					}
 				}
 
-				if (elapsed_cycles > 0 && m_phase == 3)
+				if (elapsed_cycles >= adjusted_value && m_phase == 3)
 				{
 					/* Reload counter, output goes high */
 					elapsed_cycles -= adjusted_value;
@@ -770,9 +766,8 @@ void pit_counter_device::update()
 }
 
 
-/* We recycle bit 0 of m_value to hold the phase in mode 3 when count is
-   odd. Since read commands in mode 3 always return even numbers, we need to
-   mask this bit off. */
+/* Since read commands in mode 3 always return even numbers,
+   we need to mask bit 0 off. */
 uint16_t pit_counter_device::masked_value() const
 {
 	if ((CTRL_MODE(m_control) == 3) && (downcast<pit8253_device *>(owner())->m_type != pit_type::FE2010))
@@ -972,30 +967,15 @@ void pit8254_device::readback_command(uint8_t data)
 			m_counter[timer]->readback(read_command);
 }
 
-void pit_counter_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(pit_counter_device::update_tick)
 {
 	update();
-	switch (id)
-	{
-		case TID_UPDATE:
-			break;
-
-		case TID_CONTROL:
-			control_w_deferred(param);
-			break;
-
-		case TID_COUNT:
-			count_w_deferred(param);
-			break;
-
-		case TID_GATE:
-			gate_w_deferred(param);
-			break;
-	}
 }
 
-void pit_counter_device::control_w_deferred(uint8_t data)
+TIMER_CALLBACK_MEMBER(pit_counter_device::control_w_deferred)
 {
+	update();
+	uint8_t data = (uint8_t)param;
 	if (CTRL_ACCESS(data) == 0)
 	{
 		LOG1("write(): readback\n");
@@ -1017,8 +997,10 @@ void pit_counter_device::control_w_deferred(uint8_t data)
 	}
 }
 
-void pit_counter_device::count_w_deferred(uint8_t data)
+TIMER_CALLBACK_MEMBER(pit_counter_device::count_w_deferred)
 {
+	update();
+	uint8_t data = (uint8_t)param;
 	bool middle_of_a_cycle = (machine().time() > m_last_updated && m_clockin != 0);
 
 	switch (CTRL_ACCESS(m_control))
@@ -1102,8 +1084,10 @@ void pit8253_device::write(offs_t offset, uint8_t data)
 		m_counter[offset]->count_w(data);
 }
 
-void pit_counter_device::gate_w_deferred(int state)
+TIMER_CALLBACK_MEMBER(pit_counter_device::gate_w_deferred)
 {
+	update();
+	int state = param;
 	LOG2("gate_w(): state=%d\n", state);
 
 	if (state != m_gate)

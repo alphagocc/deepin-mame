@@ -15,18 +15,19 @@
 class cd90_015_device : public device_t, public thomson_extension_interface
 {
 public:
-	cd90_015_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock = 0);
+	cd90_015_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 	virtual ~cd90_015_device() = default;
 
-	virtual void rom_map(address_map &map) override;
-	virtual void io_map(address_map &map) override;
+	virtual void rom_map(address_map &map) override ATTR_COLD;
+	virtual void io_map(address_map &map) override ATTR_COLD;
 
 protected:
-	virtual const tiny_rom_entry *device_rom_region() const override;
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual const tiny_rom_entry *device_rom_region() const override ATTR_COLD;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(motor_tick);
 
 private:
 	required_device<mc6843_device> m_fdc;

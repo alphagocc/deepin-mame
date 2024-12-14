@@ -33,6 +33,8 @@
 #include "emu.h"
 #include "floppyone.h"
 
+#include "formats/fl1_dsk.h"
+
 
 /***************************************************************************
     DEVICE DEFINITIONS
@@ -47,7 +49,7 @@ DEFINE_DEVICE_TYPE(SPECTRUM_FLPONE, spectrum_flpone_device, "spectrum_flpone", "
 
 INPUT_PORTS_START(flpone)
 	PORT_START("BUTTON")
-	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_BUTTON1) PORT_NAME("Snapshot Button") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHANGED_MEMBER(DEVICE_SELF, spectrum_flpone_device, snapshot_button, 0)
+	PORT_BIT(0x01, IP_ACTIVE_HIGH, IPT_BUTTON1) PORT_NAME("Snapshot Button") PORT_CODE(KEYCODE_MINUS_PAD) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(spectrum_flpone_device::snapshot_button), 0)
 
 	PORT_START("SW1")
 	PORT_CONFNAME(0x01, 0x01, "Disc Interface")
@@ -83,7 +85,7 @@ static void flpone_floppies(device_slot_interface &device)
 }
 
 //-------------------------------------------------
-//  floppy_format_type floppy_formats
+//  floppy_formats
 //-------------------------------------------------
 
 void spectrum_flpone_device::floppy_formats(format_registration &fr)
@@ -131,6 +133,7 @@ void spectrum_flpone_device::device_add_mconfig(machine_config &config)
 	SPECTRUM_EXPANSION_SLOT(config, m_exp, spectrum_expansion_devices, nullptr);
 	m_exp->irq_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::irq_w));
 	m_exp->nmi_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::nmi_w));
+	m_exp->fb_r_handler().set(DEVICE_SELF_OWNER, FUNC(spectrum_expansion_slot_device::fb_r));
 }
 
 const tiny_rom_entry *spectrum_flpone_device::device_rom_region() const
@@ -192,9 +195,9 @@ void spectrum_flpone_device::device_reset()
 //  IMPLEMENTATION
 //**************************************************************************
 
-READ_LINE_MEMBER(spectrum_flpone_device::romcs)
+bool spectrum_flpone_device::romcs()
 {
-	return m_romcs | m_exp->romcs();
+	return m_romcs || m_exp->romcs();
 }
 
 void spectrum_flpone_device::post_opcode_fetch(offs_t offset)

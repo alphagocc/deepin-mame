@@ -54,15 +54,19 @@ protected:
 	m5074x_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, int addrbits, address_map_constructor internal_map);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual space_config_vector memory_space_config() const override;
 
 	// device_execute_interface overrides (TODO: /8 in M50740A/41/52/57/58 SLW mode)
 	virtual uint64_t execute_clocks_to_cycles(uint64_t clocks) const noexcept override { return (clocks + 4 - 1) / 4; }
 	virtual uint64_t execute_cycles_to_clocks(uint64_t cycles) const noexcept override { return (cycles * 4); }
 	virtual void execute_set_input(int inputnum, int state) override;
+
+	TIMER_CALLBACK_MEMBER(timer1_tick);
+	TIMER_CALLBACK_MEMBER(timer2_tick);
+	TIMER_CALLBACK_MEMBER(timerx_tick);
+	virtual TIMER_CALLBACK_MEMBER(adc_complete) { }
 
 	void send_port(uint8_t offset, uint8_t data);
 	uint8_t read_port(uint8_t offset);
@@ -92,7 +96,7 @@ protected:
 	m50740_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 private:
-	void m50740_map(address_map &map);
+	void m50740_map(address_map &map) ATTR_COLD;
 };
 
 class m50741_device : public m5074x_device
@@ -104,7 +108,7 @@ protected:
 	m50741_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 private:
-	void m50741_map(address_map &map);
+	void m50741_map(address_map &map) ATTR_COLD;
 };
 
 class m50753_device : public m5074x_device
@@ -126,14 +130,15 @@ protected:
 	m50753_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 
 	virtual void execute_set_input(int inputnum, int state) override;
 
+	virtual TIMER_CALLBACK_MEMBER(adc_complete) override;
+
 private:
-	void m50753_map(address_map &map);
+	void m50753_map(address_map &map) ATTR_COLD;
 
 	uint8_t ad_r();
 	uint8_t in_r();

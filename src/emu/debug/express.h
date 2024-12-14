@@ -86,17 +86,19 @@ public:
 	};
 
 	// construction/destruction
-	expression_error(error_code code, int offset = 0, int num = 0)
-		: m_code(code),
-			m_offset(offset),
-			m_num(num) { }
+	constexpr expression_error(error_code code, int offset = 0, int num = 0)
+		: m_code(code)
+		, m_offset(offset)
+		, m_num(num)
+	{
+	}
 
 	// operators
-	operator error_code() const { return m_code; }
+	constexpr operator error_code() const { return m_code; }
 
 	// getters
-	error_code code() const { return m_code; }
-	int offset() const { return m_offset; }
+	constexpr error_code code() const { return m_code; }
+	constexpr int offset() const { return m_offset; }
 	std::string code_string() const;
 
 private:
@@ -175,15 +177,16 @@ public:
 	// getters
 	const std::unordered_map<std::string, std::unique_ptr<symbol_entry>> &entries() const { return m_symlist; }
 	symbol_table *parent() const { return m_parent; }
+	running_machine &machine() { return m_machine; }
 
 	// setters
 	void set_memory_modified_func(memory_modified_func modified);
 
 	// symbol access
-	void add(const char *name, read_write rw, u64 *ptr = nullptr);
-	void add(const char *name, u64 constvalue);
-	void add(const char *name, getter_func getter, setter_func setter = nullptr, const std::string &format_string = "");
-	void add(const char *name, int minparams, int maxparams, execute_func execute);
+	symbol_entry &add(const char *name, read_write rw, u64 *ptr = nullptr);
+	symbol_entry &add(const char *name, u64 constvalue);
+	symbol_entry &add(const char *name, getter_func getter, setter_func setter = nullptr, const std::string &format_string = "");
+	symbol_entry &add(const char *name, int minparams, int maxparams, execute_func execute);
 	symbol_entry *find(const char *name) const { if (name) { auto search = m_symlist.find(name); if (search != m_symlist.end()) return search->second.get(); else return nullptr; } else return nullptr; }
 	symbol_entry *find_deep(const char *name);
 

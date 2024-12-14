@@ -24,8 +24,6 @@
 #include "machine/i8255.h"
 
 
-#define LOG_GENERAL (1U << 0)
-
 //#define VERBOSE (LOG_GENERAL)
 //#define LOG_OUTPUT_FUNC printf
 #include "logmacro.h"
@@ -71,10 +69,10 @@ INPUT_CHANGED_MEMBER(bus_mouse_device::mouse_y_changed)
 
 INPUT_PORTS_START( bus_mouse )
 	PORT_START("mouse_x")
-	PORT_BIT( 0xff, 0x00, IPT_MOUSE_X ) PORT_SENSITIVITY(50) PORT_KEYDELTA(5) PORT_MINMAX(0, 255) PORT_CHANGED_MEMBER(DEVICE_SELF, bus_mouse_device, mouse_x_changed, 0)
+	PORT_BIT( 0xff, 0x00, IPT_MOUSE_X ) PORT_SENSITIVITY(50) PORT_KEYDELTA(5) PORT_MINMAX(0, 255) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bus_mouse_device::mouse_x_changed), 0)
 
 	PORT_START("mouse_y")
-	PORT_BIT( 0xff, 0x00, IPT_MOUSE_Y ) PORT_SENSITIVITY(50) PORT_KEYDELTA(5) PORT_MINMAX(0, 255) PORT_CHANGED_MEMBER(DEVICE_SELF, bus_mouse_device, mouse_y_changed, 0)
+	PORT_BIT( 0xff, 0x00, IPT_MOUSE_Y ) PORT_SENSITIVITY(50) PORT_KEYDELTA(5) PORT_MINMAX(0, 255) PORT_CHANGED_MEMBER(DEVICE_SELF, FUNC(bus_mouse_device::mouse_y_changed), 0)
 
 	PORT_START("mouse_buttons")
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_BUTTON1 ) PORT_NAME("Left Mouse Button") PORT_CODE(MOUSECODE_BUTTON1)
@@ -141,10 +139,7 @@ void bus_mouse_device::device_add_mconfig(machine_config &config)
 
 void bus_mouse_device::device_start()
 {
-	// resolve callbacks
-	m_write_extint.resolve_safe();
-
-	m_irq_timer = timer_alloc(0);
+	m_irq_timer = timer_alloc(FUNC(bus_mouse_device::irq_timer_tick), this);
 }
 
 
@@ -165,7 +160,7 @@ void bus_mouse_device::device_reset()
 	LOG("irq rate: %d Hz\n", hz);
 }
 
-void bus_mouse_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(bus_mouse_device::irq_timer_tick)
 {
 	irq = !irq;
 

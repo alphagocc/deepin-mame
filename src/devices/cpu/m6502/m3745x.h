@@ -56,15 +56,16 @@ protected:
 	m3745x_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock, address_map_constructor internal_map);
 
 	// device-level overrides
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
 	virtual space_config_vector memory_space_config() const override;
 
 	// device_execute_interface overrides
 	virtual uint64_t execute_clocks_to_cycles(uint64_t clocks) const noexcept override { return (clocks + 4 - 1) / 4; }
 	virtual uint64_t execute_cycles_to_clocks(uint64_t cycles) const noexcept override { return (cycles * 4); }
 	virtual void execute_set_input(int inputnum, int state) override;
+
+	TIMER_CALLBACK_MEMBER(adc_complete);
 
 	void send_port(uint8_t offset, uint8_t data);
 	uint8_t read_port(uint8_t offset);
@@ -89,7 +90,7 @@ class m37450_device : public m3745x_device
 public:
 	m37450_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
-	void m37450_map(address_map &map);
+	void m37450_map(address_map &map) ATTR_COLD;
 protected:
 	m37450_device(const machine_config &mconfig, device_type type, const char *tag, device_t *owner, uint32_t clock);
 };

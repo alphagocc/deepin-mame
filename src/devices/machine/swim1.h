@@ -33,9 +33,10 @@ public:
 	virtual void sync() override;
 
 protected:
-	virtual void device_start() override;
-	virtual void device_reset() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
+	virtual void device_start() override ATTR_COLD;
+	virtual void device_reset() override ATTR_COLD;
+
+	TIMER_CALLBACK_MEMBER(update);
 
 private:
 	enum {
@@ -111,6 +112,9 @@ private:
 	u8 m_iwm_to_ism_counter;
 	u8 m_iwm_devsel;
 
+	emu_timer *m_sync_timer;
+	TIMER_CALLBACK_MEMBER(ism_periodic_sync);
+
 	u64 time_to_cycles(const attotime &tm) const;
 	attotime cycles_to_time(u64 cycles) const;
 	void flush_write(u64 when = 0);
@@ -133,6 +137,7 @@ private:
 	u8 ism_read(offs_t offset);
 	void ism_write(offs_t offset, u8 data);
 	void ism_sync();
+	void ism_update_dat1byte();
 };
 
 DECLARE_DEVICE_TYPE(SWIM1, swim1_device)

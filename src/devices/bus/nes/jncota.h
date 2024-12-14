@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders: kmg, Fabio Priuli
+// copyright-holders:kmg
 #ifndef MAME_BUS_NES_JNCOTA_H
 #define MAME_BUS_NES_JNCOTA_H
 
@@ -22,7 +22,7 @@ public:
 
 protected:
 	// device-level overrides
-	virtual void device_start() override;
+	virtual void device_start() override ATTR_COLD;
 
 private:
 	u8 m_reg[3];

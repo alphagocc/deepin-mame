@@ -44,7 +44,7 @@ DEFINE_DEVICE_TYPE(C128_PARTNER, c128_partner_cartridge_device, "c128_partner", 
 //  INPUT_PORTS( c128_partner )
 //-------------------------------------------------
 
-WRITE_LINE_MEMBER( c128_partner_cartridge_device::nmi_w )
+void c128_partner_cartridge_device::nmi_w(int state)
 {
 	if (state)
 	{
@@ -54,7 +54,7 @@ WRITE_LINE_MEMBER( c128_partner_cartridge_device::nmi_w )
 
 static INPUT_PORTS_START( c128_partner )
 	PORT_START("NMI")
-	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Menu") PORT_CODE(KEYCODE_END) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, c128_partner_cartridge_device, nmi_w)
+	PORT_BIT( 0x01, IP_ACTIVE_HIGH, IPT_OTHER ) PORT_NAME("Menu") PORT_CODE(KEYCODE_END) PORT_WRITE_LINE_DEVICE_MEMBER(DEVICE_SELF, FUNC(c128_partner_cartridge_device::nmi_w))
 INPUT_PORTS_END
 
 
@@ -98,7 +98,7 @@ c128_partner_cartridge_device::c128_partner_cartridge_device(const machine_confi
 void c128_partner_cartridge_device::device_start()
 {
 	// simulate the 16.7ms pulse from CIA1 PB2 that would arrive thru the joystick port dongle
-	t_joyb2 = timer_alloc();
+	t_joyb2 = timer_alloc(FUNC(c128_partner_cartridge_device::update_joyb2), this);
 	t_joyb2->adjust(attotime::from_msec(16), 0, attotime::from_msec(16));
 
 	// state saving
@@ -127,10 +127,10 @@ void c128_partner_cartridge_device::device_reset()
 
 
 //-------------------------------------------------
-//  device_timer -
+//  update_joyb2 -
 //-------------------------------------------------
 
-void c128_partner_cartridge_device::device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr)
+TIMER_CALLBACK_MEMBER(c128_partner_cartridge_device::update_joyb2)
 {
 	if (m_ls74_cd)
 	{

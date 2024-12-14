@@ -183,9 +183,9 @@ public:
 		return screen;
 	}
 
-	virtual void io_map(address_map &map);
-	virtual void char_map(address_map &map);
-	virtual void page_map(address_map &map);
+	virtual void io_map(address_map &map) ATTR_COLD;
+	virtual void char_map(address_map &map) ATTR_COLD;
+	virtual void page_map(address_map &map) ATTR_COLD;
 
 	void out3_w(uint8_t data);
 	void out4_w(offs_t offset);
@@ -204,13 +204,12 @@ public:
 
 	uint32_t screen_update(screen_device &screen, bitmap_rgb32 &bitmap, const rectangle &cliprect);
 
-	void cdp1869(address_map &map);
+	void cdp1869(address_map &map) ATTR_COLD;
 protected:
 	// device-level overrides
-	virtual void device_add_mconfig(machine_config &config) override;
-	virtual void device_start() override;
+	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
+	virtual void device_start() override ATTR_COLD;
 	virtual void device_post_load() override;
-	virtual void device_timer(emu_timer &timer, device_timer_id id, int param, void *ptr) override;
 
 	// device_memory_interface overrides
 	virtual space_config_vector memory_space_config() const override;
@@ -218,18 +217,21 @@ protected:
 	// device_sound_interface callbacks
 	virtual void sound_stream_update(sound_stream &stream, std::vector<read_stream_view> const &inputs, std::vector<write_stream_view> &outputs) override;
 
-	inline bool is_ntsc();
-	inline uint8_t read_page_ram_byte(offs_t address);
-	inline void write_page_ram_byte(offs_t address, uint8_t data);
-	inline uint8_t read_char_ram_byte(offs_t pma, offs_t cma, uint8_t pmd);
-	inline void write_char_ram_byte(offs_t pma, offs_t cma, uint8_t pmd, uint8_t data);
-	inline int read_pcb(offs_t pma, offs_t cma, uint8_t pmd);
-	inline void update_prd_changed_timer();
+	TIMER_CALLBACK_MEMBER(prd_update);
+
 	static rgb_t get_rgb(int i, int c, int l);
-	inline int get_lines();
-	inline uint16_t get_pmemsize(int cols, int rows);
-	inline uint16_t get_pma();
-	inline int get_pen(int ccb0, int ccb1, int pcb);
+
+	bool is_ntsc();
+	uint8_t read_page_ram_byte(offs_t address);
+	void write_page_ram_byte(offs_t address, uint8_t data);
+	uint8_t read_char_ram_byte(offs_t pma, offs_t cma, uint8_t pmd);
+	void write_char_ram_byte(offs_t pma, offs_t cma, uint8_t pmd, uint8_t data);
+	int read_pcb(offs_t pma, offs_t cma, uint8_t pmd);
+	void update_prd_changed_timer();
+	int get_lines();
+	uint16_t get_pmemsize(int cols, int rows);
+	uint16_t get_pma();
+	int get_pen(int ccb0, int ccb1, int pcb);
 
 	void draw_line(bitmap_rgb32 &bitmap, const rectangle &rect, int x, int y, uint8_t data, int color);
 	void draw_char(bitmap_rgb32 &bitmap, const rectangle &rect, int x, int y, uint16_t pma);

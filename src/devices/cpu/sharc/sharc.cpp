@@ -10,8 +10,6 @@
 #include "sharcfe.h"
 #include "sharcdsm.h"
 
-#include "debugger.h"
-
 
 #define DISABLE_FAST_REGISTERS      1
 
@@ -492,34 +490,22 @@ void adsp21062_device::device_start()
 	m_drcuml->symbol_add(&m_core->pc, sizeof(m_core->pc), "pc");
 	m_drcuml->symbol_add(&m_core->icount, sizeof(m_core->icount), "icount");
 
-	for (int i=0; i < 16; i++)
+	for (int i = 0; i < 16; i++)
 	{
 		char buf[10];
-		sprintf(buf, "r%d", i);
+
+		snprintf(buf, std::size(buf), "r%d", i);
 		m_drcuml->symbol_add(&m_core->r[i], sizeof(m_core->r[i]), buf);
 
-		if (i < 8)
-		{
-			sprintf(buf, "dag_i%d", i);
-			m_drcuml->symbol_add(&m_core->dag1.i[i & 7], sizeof(m_core->dag1.i[i & 7]), buf);
-			sprintf(buf, "dag_m%d", i);
-			m_drcuml->symbol_add(&m_core->dag1.m[i & 7], sizeof(m_core->dag1.m[i & 7]), buf);
-			sprintf(buf, "dag_l%d", i);
-			m_drcuml->symbol_add(&m_core->dag1.l[i & 7], sizeof(m_core->dag1.l[i & 7]), buf);
-			sprintf(buf, "dag_b%d", i);
-			m_drcuml->symbol_add(&m_core->dag1.b[i & 7], sizeof(m_core->dag1.b[i & 7]), buf);
-		}
-		else
-		{
-			sprintf(buf, "dag_i%d", i);
-			m_drcuml->symbol_add(&m_core->dag2.i[i & 7], sizeof(m_core->dag2.i[i & 7]), buf);
-			sprintf(buf, "dag_m%d", i);
-			m_drcuml->symbol_add(&m_core->dag2.m[i & 7], sizeof(m_core->dag2.m[i & 7]), buf);
-			sprintf(buf, "dag_l%d", i);
-			m_drcuml->symbol_add(&m_core->dag2.l[i & 7], sizeof(m_core->dag2.l[i & 7]), buf);
-			sprintf(buf, "dag_b%d", i);
-			m_drcuml->symbol_add(&m_core->dag2.b[i & 7], sizeof(m_core->dag2.b[i & 7]), buf);
-		}
+		SHARC_DAG &dag((i < 8) ? m_core->dag1 : m_core->dag2);
+		snprintf(buf, std::size(buf), "dag_i%d", i);
+		m_drcuml->symbol_add(&dag.i[i & 7], sizeof(dag.i[i & 7]), buf);
+		snprintf(buf, std::size(buf), "dag_m%d", i);
+		m_drcuml->symbol_add(&dag.m[i & 7], sizeof(dag.m[i & 7]), buf);
+		snprintf(buf, std::size(buf), "dag_l%d", i);
+		m_drcuml->symbol_add(&dag.l[i & 7], sizeof(dag.l[i & 7]), buf);
+		snprintf(buf, std::size(buf), "dag_b%d", i);
+		m_drcuml->symbol_add(&dag.b[i & 7], sizeof(dag.b[i & 7]), buf);
 	}
 
 	m_drcuml->symbol_add(&m_core->astat, sizeof(m_core->astat), "astat");
@@ -582,7 +568,7 @@ void adsp21062_device::device_start()
 	m_core->cache_dirty = 1;
 
 
-	m_core->delayed_iop_timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(adsp21062_device::sharc_iop_delayed_write_callback), this));
+	m_core->delayed_iop_timer = timer_alloc(FUNC(adsp21062_device::sharc_iop_delayed_write_callback), this);
 
 	for (auto & elem : m_core->dma_op)
 	{
@@ -596,7 +582,7 @@ void adsp21062_device::device_start()
 		elem.pmode = 0;
 		elem.chained_direction = 0;
 		elem.active = false;
-		elem.timer = machine().scheduler().timer_alloc(timer_expired_delegate(FUNC(adsp21062_device::sharc_dma_callback), this));
+		elem.timer = timer_alloc(FUNC(adsp21062_device::sharc_dma_callback), this);
 	}
 
 	for (int i=0; i < 16; i++)
@@ -978,7 +964,7 @@ void adsp21062_device::set_flag_input(int flag_num, int state)
 	}
 }
 
-WRITE_LINE_MEMBER(adsp21062_device::write_stall)
+void adsp21062_device::write_stall(int state)
 {
 	m_core->write_stalled = (state == 0) ? false : true;
 
@@ -1052,6 +1038,8 @@ void adsp21062_device::execute_run()
 
 		if (m_core->idle && m_core->irq_pending == 0)
 		{
+			debugger_wait_hook();
+
 			int dma_count = m_core->icount;
 
 			// run active DMAs even while idling
@@ -1066,7 +1054,6 @@ void adsp21062_device::execute_run()
 			}
 
 			m_core->icount = 0;
-			debugger_instruction_hook(m_core->daddr);
 		}
 		if (m_core->irq_pending != 0)
 		{

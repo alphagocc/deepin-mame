@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">
 <!--
-license:CC0
+license:CC0-1.0
 
 FM-7 floppy disk images
 Multi-image games are untested
@@ -242,6 +242,22 @@ Titles, serial #s, publishers and release dates taken from:
 		</part>
 	</software>
 
+	<!-- was originally in fm77av.xml, game is supported by base FM-7 anyway -->
+	<!-- https://fm-7.com/museum/products/rb7irg02/ -->
+	<!-- assume either mistake or actually one of the two is 3.5" version -->
+	<software name="dsenraku" cloneof="daisenr">
+		<description>Daisenryaku FM (alt)</description>
+		<year>1987</year>
+		<publisher>システムソフト (System Soft)</publisher>
+		<info name="release" value="198708xx"/>
+		<info name="alt_title" value="大戦略FM"/>
+		<part name="flop1" interface="floppy_5_25">
+			<dataarea name="flop" size="348848">
+				<rom name="dsenryaku.d77" size="348848" crc="35f02f75" sha1="f590c7f2d3d1b602274bef5e1992babf4acfebc3"/>
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="darkcrys">
 		<description>Dark Crystal</description>
 		<year>1984</year>
@@ -337,7 +353,7 @@ Titles, serial #s, publishers and release dates taken from:
 	</software>
 
 	<software name="flolitaa" cloneof="flolita">
-		<description>Final Lolita (Alt)</description>
+		<description>Final Lolita (alt)</description>
 		<year>1985</year>
 		<publisher>パソコンショップ高知 (PSK)</publisher>
 		<info name="release" value="198511xx"/>
@@ -361,11 +377,22 @@ Titles, serial #s, publishers and release dates taken from:
 		</part>
 	</software>
 
+	<software name="fmlogo">
+		<description>FM Logo 2.0</description>
+		<year>1984</year>
+		<publisher>Logo Computer Systems</publisher>
+		<part name="flop1" interface="floppy_5_25">
+			<dataarea name="flop" size="348848">
+				<rom name="fm_logo_2.0.d77" size="348848" crc="89dd51b4" sha1="f32cb4642ec2bbf5712e023dc3bf13a8b24796b0" offset="0"/>
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="gambler">
 	<!-- Keys listed in readme are as follows:
-キー操作/ リターン:チー F1:リーチ F2:ポン F3:カン F4:和了 F10:九種九牌
-	 F5:指導機能ON/OFF F6:サウンドON/OFF F7:オープンモード F8:オートモード
-	 ESC(XM7:半角/全角):ポーズ・点数表示 HOME:捨て牌指導   -->
+	     キー操作/ リターン:チー F1:リーチ F2:ポン F3:カン F4:和了 F10:九種九牌
+	     F5:指導機能ON/OFF F6:サウンドON/OFF F7:オープンモード F8:オートモード
+	     ESC(XM7:半角/全角):ポーズ・点数表示 HOME:捨て牌指導 -->
 		<description>Gambler Jikochuushinha</description>
 		<year>1989</year>
 		<publisher>ゲームアーツ (Game Arts)</publisher>
@@ -539,7 +566,7 @@ Titles, serial #s, publishers and release dates taken from:
 
 <!-- Disk 2 only differs in the d77 header -->
 	<software name="hydlide2a" cloneof="hydlide2">
-		<description>Hydlide II - Shine of Darkness (Alt Disk 1)</description>
+		<description>Hydlide II - Shine of Darkness (alt Disk 1)</description>
 		<year>1986</year>
 		<publisher>T&amp;E Soft</publisher>
 		<info name="serial" value="TED-65, TEM-65"/>
@@ -847,7 +874,7 @@ Titles, serial #s, publishers and release dates taken from:
 		</part>
 	</software>
 
-	<!-- No sound on the FM-7, FM sound only?  -->
+	<!-- No sound on the FM-7, FM sound only? -->
 	<software name="psychwar">
 		<description>Psychic War - Cosmic Soldier 2</description>
 		<year>1988</year>
@@ -903,6 +930,19 @@ Titles, serial #s, publishers and release dates taken from:
 		</part>
 	</software>
 
+	<software name="rayieza">
+		<description>The Earth Fighter Rayieza</description>
+		<year>1985</year>
+		<publisher>エニックス (Enix)</publisher>
+		<info name="serial" value="E-G154"/>
+		<info name="alt_title" value="地球戦士ライーザ"/>
+		<part name="flop1" interface="floppy_5_25">
+			<dataarea name="flop" size="1083470">
+				<rom name="chikyuu_senshi_rayieza.mfm" size="1083470" crc="f834a5fa" sha1="f96d0bce8542fd4b6b41a235825bf562943f0653" offset="0"/>
+			</dataarea>
+		</part>
+	</software>
+
 	<software name="relics">
 		<description>Relics</description>
 		<year>1986</year>
@@ -952,7 +992,7 @@ Titles, serial #s, publishers and release dates taken from:
 	</software>
 
 	<software name="revivera" cloneof="reviver">
-		<description>Reviver (Alt Master Disk)</description>
+		<description>Reviver (alt Master Disk)</description>
 		<year>1987</year>
 		<publisher>アルシスソフト (Arsys Soft)</publisher>
 		<info name="alt_title" value="リバイバー"/>
@@ -1110,7 +1150,7 @@ Titles, serial #s, publishers and release dates taken from:
 	</software>
 
 	<software name="thexdera" cloneof="thexder">
-		<description>Thexder (Protected)</description>
+		<description>Thexder (protected)</description>
 		<year>1985</year>
 		<publisher>ゲームアーツ (Game Arts)</publisher>
 		<info name="release" value="198510xx"/>
@@ -1162,7 +1202,7 @@ Titles, serial #s, publishers and release dates taken from:
 	</software>
 
 	<software name="transylva" cloneof="transylv" supported="no">
-		<description>Transylvania (Alt?)</description>
+		<description>Transylvania (alt?)</description>
 		<year>1983</year>
 		<publisher>スタークラフト (Starcraft)</publisher>
 		<info name="alt_title" value="トランシルバニア"/>
@@ -1303,7 +1343,7 @@ Titles, serial #s, publishers and release dates taken from:
 	</software>
 
 	<software name="wibarma" cloneof="wibarm">
-		<description>Wibarm (Alt Data Disk)</description>
+		<description>Wibarm (alt Data Disk)</description>
 		<year>1986</year>
 		<publisher>アルシスソフト (Arsys Soft)</publisher>
 		<info name="release" value="198610xx"/>
@@ -1482,7 +1522,7 @@ Titles, serial #s, publishers and release dates taken from:
 
 <!-- The user disk from this set has been reported to make the set above working! Investigate! -->
 	<software name="xanadu2a" cloneof="xanadu2">
-		<description>Xanadu Scenario II - The Resurrection of Dragon (Alt)</description>
+		<description>Xanadu Scenario II - The Resurrection of Dragon (alt)</description>
 		<year>1986</year>
 		<publisher>日本ファルコム (Nihon Falcom)</publisher>
 		<info name="release" value="198611xx"/>
@@ -1570,7 +1610,7 @@ Titles, serial #s, publishers and release dates taken from:
 	</software>
 
 	<software name="ysa" cloneof="ys">
-		<description>Ys - Ancient Ys Vanished Omen (Alt Data Disk)</description>
+		<description>Ys - Ancient Ys Vanished Omen (alt Data Disk)</description>
 		<year>1987</year>
 		<publisher>日本ファルコム (Nihon Falcom)</publisher>
 		<info name="serial" value="FUNW13029"/>
@@ -2060,43 +2100,43 @@ systems, for the moment they stay here!
 
 		<part name="flop1" interface="floppy_5_25">
 			<dataarea name="flop" size="348848">
-					<rom name="game pack 1.d77" size="348848" crc="732e4275" sha1="ef1c29f4ea79bd73ec994bec103d0f65bfbf0f18" offset="0"/>
+				<rom name="game pack 1.d77" size="348848" crc="732e4275" sha1="ef1c29f4ea79bd73ec994bec103d0f65bfbf0f18" offset="0"/>
 			</dataarea>
 		</part>
 	</software>
 
 	<software name="pack02">
-		<description>Game Pack (Alt)</description>
+		<description>Game Pack (alt)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 
 		<part name="flop1" interface="floppy_5_25">
 			<dataarea name="flop" size="348848">
-					<rom name="game pack 2.d77" size="348848" crc="0efd8e5d" sha1="d85f66b51bfb1e8c63a27bbeaf0d2d0fc1784304" offset="0"/>
+				<rom name="game pack 2.d77" size="348848" crc="0efd8e5d" sha1="d85f66b51bfb1e8c63a27bbeaf0d2d0fc1784304" offset="0"/>
 			</dataarea>
 		</part>
 	</software>
 
 	<software name="pack03">
-		<description>Game Pack (Alt 2)</description>
+		<description>Game Pack (alt 2)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 
 		<part name="flop1" interface="floppy_5_25">
 			<dataarea name="flop" size="348848">
-					<rom name="game pack 3.d77" size="348848" crc="652a9aec" sha1="b7bfd70cbb52b086704f6a3b98556ecc83733032" offset="0"/>
+				<rom name="game pack 3.d77" size="348848" crc="652a9aec" sha1="b7bfd70cbb52b086704f6a3b98556ecc83733032" offset="0"/>
 			</dataarea>
 		</part>
 	</software>
 
 	<software name="pack04">
-		<description>Game Pack (Alt 3)</description>
+		<description>Game Pack (alt 3)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 
 		<part name="flop1" interface="floppy_5_25">
 			<dataarea name="flop" size="348848">
-					<rom name="game pack 4.d77" size="348848" crc="ad232598" sha1="711552ffe2ce4439a6f389fe2d92938d268995fc" offset="0"/>
+				<rom name="game pack 4.d77" size="348848" crc="ad232598" sha1="711552ffe2ce4439a6f389fe2d92938d268995fc" offset="0"/>
 			</dataarea>
 		</part>
 	</software>
@@ -2138,7 +2178,7 @@ Others are no-warranty...
 	</software>
 
 	<software name="game03ga" cloneof="game03g">
-		<description>Game 03G (Alt?)</description>
+		<description>Game 03G (alt?)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 		<part name="flop1" interface="floppy_5_25">
@@ -2188,7 +2228,7 @@ Others are not start...
 	</software>
 
 	<software name="game011a" cloneof="game011">
-		<description>Game 011 (Alt)</description>
+		<description>Game 011 (alt)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 		<part name="flop1" interface="floppy_5_25">
@@ -2217,7 +2257,7 @@ Disk #012 for FM-7/77/AV
 	</software>
 
 	<software name="game012a" cloneof="game012">
-		<description>Game 012 (Alt)</description>
+		<description>Game 012 (alt)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 		<part name="flop1" interface="floppy_5_25">
@@ -2246,7 +2286,7 @@ Game #013 for FM-7/77/AV.
 	</software>
 
 	<software name="game013a" cloneof="game013">
-		<description>Game 013 (Alt)</description>
+		<description>Game 013 (alt)</description>
 		<year>19??</year>
 		<publisher>&lt;unknown&gt;</publisher>
 		<part name="flop1" interface="floppy_5_25">
