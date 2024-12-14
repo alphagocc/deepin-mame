@@ -1,8 +1,264 @@
-mame (0.237+dfsg.1-1) UNRELEASED; urgency=medium
+mame (0.272+dfsg.1-1) unstable; urgency=medium
 
-  * update
+  * New upstream release.
 
- -- Debian Games Team <pkg-games-devel@lists.alioth.debian.org>  Wed, 25 May 2022 21:22:54 +0800
+ -- Cesare Falco <c.falco@ubuntu.com>  Sun, 01 Dec 2024 16:40:03 +0100
+
+mame (0.271+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Thu, 31 Oct 2024 19:51:31 +0100
+
+mame (0.270+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Thu, 26 Sep 2024 11:44:48 +0200
+
+mame (0.269+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Thu, 29 Aug 2024 15:19:57 +0200
+
+mame (0.268+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 31 Jul 2024 10:36:26 +0200
+
+mame (0.267+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Add unidasm to mame-tools package.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Sun, 30 Jun 2024 20:02:31 +0200
+
+mame (0.266+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Fri, 31 May 2024 15:32:38 +0200
+
+mame (0.265+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Thu, 25 Apr 2024 10:50:10 +0200
+
+mame (0.264+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 27 Mar 2024 10:59:53 +0100
+
+mame (0.263+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 28 Feb 2024 11:52:07 +0100
+
+mame (0.262+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Update patches.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 31 Jan 2024 12:18:04 +0100
+
+mame (0.261+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 20 Dec 2023 18:34:35 +0100
+
+mame (0.260+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * Update patches
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 25 Oct 2023 10:55:23 +0200
+
+mame (0.258+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 30 Aug 2023 11:11:35 +0200
+
+mame (0.257+dfsg.1-1) unstable; urgency=medium
+
+  [ Jordi Mallach ]
+  * Add patch from Rob Savoury <savoury@savos.tech> to use the now available
+    sphinxcontrib.rsvgconverter for the documentation generation
+    (closes: #1023950).
+
+  [ Cesare Falco ]
+  * New upstream release
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Fri, 28 Jul 2023 12:08:48 +0200
+
+mame (0.256+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+    - includes fixes for build failures with GCC 13 (closes: #1037766).
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 28 Jun 2023 15:52:34 +0200
+
+mame (0.255+dfsg.1-2) unstable; urgency=medium
+
+  * Fix builds on 32bit arm architectures:
+    - add patches from src:7zip to disable hardware acceleration where
+      appropriate.
+    - add -Wl,--long-plt to LDFLAGS on armel.
+    Thanks to Adrian Bunk for the above!
+
+ -- Jordi Mallach <jordi@debian.org>  Fri, 23 Jun 2023 02:19:15 +0200
+
+mame (0.255+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Unset XS-Autobuild, MAME moved to main 7 years ago.
+  * Update Standards-Version to 4.6.2 with no changes needed.
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 14 Jun 2023 23:58:03 +0200
+
+mame (0.254+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Thu, 27 Apr 2023 09:50:23 +0200
+
+mame (0.253+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Updated patches.
+  * (Temporarily) use contributed Lua 5.4 (required compiled as C++).
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Thu, 30 Mar 2023 21:57:24 +0200
+
+mame (0.252+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Updated patches.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Fri, 24 Feb 2023 20:47:03 +0100
+
+mame (0.251+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Fri, 30 Dec 2022 18:08:54 +0100
+
+mame (0.250+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Updated dependencies to libasio >= 1.20.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 30 Nov 2022 11:19:02 +0100
+
+mame (0.249+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Build with system asio again.
+
+ -- Jordi Mallach <jordi@debian.org>  Wed, 09 Nov 2022 01:31:09 +0100
+
+mame (0.248+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Update Standards-Version to 4.6.1, with no changes.
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 24 Oct 2022 01:58:59 +0200
+
+mame (0.247+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 31 Aug 2022 15:06:26 +0200
+
+mame (0.246+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Refresh patches.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Sun, 31 Jul 2022 12:36:55 +0200
+
+mame (0.245+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Refresh patches.
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 30 Jun 2022 10:49:06 +0200
+
+mame (0.244+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Refresh existing patches.
+  * New patch ftbfs_244_netlist_plib (missing defs).
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 25 May 2022 19:25:40 +0200
+
+mame (0.243+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Refresh patches.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Fri, 29 Apr 2022 15:10:37 +0200
+
+mame (0.242+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Add debian/gbp.conf with our current gbp defaults.
+
+ -- Jordi Mallach <jordi@debian.org>  Sat, 09 Apr 2022 00:01:51 +0200
+
+mame (0.241+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 28 Feb 2022 11:45:08 +0100
+
+mame (0.240+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Sun, 30 Jan 2022 15:30:18 +0100
+
+mame (0.239+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Cesare Falco <c.falco@ubuntu.com>  Wed, 29 Dec 2021 18:41:03 +0100
+
+mame (0.238+dfsg.1-1) unstable; urgency=medium
+
+  [ Cesare Falco ]
+  * New upstream release.
+
+  [ Jordi Mallach ]
+  * Move setting of FORCE_DRC_C_BACKEND=1 to patch like it was
+    before, to fix a regression in alpha and ia64.
+  * Refresh patches.
+  * Drop unused lintian overrides.
+
+ -- Jordi Mallach <jordi@debian.org>  Fri, 26 Nov 2021 12:21:14 +0100
 
 mame (0.237+dfsg.1-1) unstable; urgency=medium
 
@@ -96,7 +352,7 @@ mame (0.228+dfsg.1-1) unstable; urgency=medium
   * Updated patches.
   * debian/rules
     + Add switch to build with g++ 9 (g++ 10 seems buggy on some archs)
-    + Rework code to allow parallel build on a per-arch basis 
+    + Rework code to allow parallel build on a per-arch basis
 
  -- Cesare Falco <c.falco@ubuntu.com>  Wed, 27 Jan 2021 19:26:13 +0100
 

@@ -6,7 +6,7 @@ Index: mame/makefile
 ===================================================================
 --- mame.orig/makefile
 +++ mame/makefile
-@@ -214,6 +214,9 @@ ifeq ($(firstword $(filter OpenBSD,$(UNA
+@@ -224,6 +224,9 @@ ifeq ($(firstword $(filter OpenBSD,$(UNA
  OS := openbsd
  GENIEOS := freebsd
  endif
@@ -16,7 +16,7 @@ Index: mame/makefile
  ifeq ($(firstword $(filter Darwin,$(UNAME))),Darwin)
  OS := macosx
  GENIEOS := darwin
-@@ -1405,6 +1408,16 @@ linux: generate $(PROJECTDIR)/$(MAKETYPE
+@@ -1319,6 +1322,16 @@ linux: generate $(PROJECTDIR)/$(MAKETYPE
  	$(SILENT) $(MAKE) $(MAKEPARAMS) -C $(PROJECTDIR)/$(MAKETYPE)-linux config=$(CONFIG) precompile
  	$(SILENT) $(MAKE) $(MAKEPARAMS) -C $(PROJECTDIR)/$(MAKETYPE)-linux config=$(CONFIG)
  
@@ -37,7 +37,7 @@ Index: mame/scripts/src/osd/sdl.lua
 ===================================================================
 --- mame.orig/scripts/src/osd/sdl.lua
 +++ mame/scripts/src/osd/sdl.lua
-@@ -242,6 +242,9 @@ SDLOS_TARGETOS      = "unix"
+@@ -232,6 +232,9 @@ SDLOS_TARGETOS      = "unix"
  if _OPTIONS["targetos"]=="linux" then
  elseif _OPTIONS["targetos"]=="openbsd" then
  elseif _OPTIONS["targetos"]=="netbsd" then
@@ -107,24 +107,11 @@ Index: mame/scripts/genie.lua
 ===================================================================
 --- mame.orig/scripts/genie.lua
 +++ mame/scripts/genie.lua
-@@ -144,6 +144,7 @@ newoption {
- 		{ "freebsd",       "FreeBSD"                },
+@@ -150,6 +150,7 @@ newoption {
  		{ "netbsd",        "NetBSD"                 },
  		{ "openbsd",       "OpenBSD"                },
-+		{ "gnu",           "GNU"                    },
- 		{ "pnacl",         "Native Client - PNaCl"  },
  		{ "linux",         "Linux"                  },
- 		{ "ios",           "iOS"                    },
-Index: mame/src/osd/modules/render/drawbgfx.cpp
-===================================================================
---- mame.orig/src/osd/modules/render/drawbgfx.cpp
-+++ mame/src/osd/modules/render/drawbgfx.cpp
-@@ -170,7 +170,7 @@ static void* sdlNativeWindowHandle(SDL_W
- 		return nullptr;
- 	}
- 
--#   if BX_PLATFORM_LINUX || BX_PLATFORM_BSD || BX_PLATFORM_RPI
-+#   if BX_PLATFORM_LINUX || BX_PLATFORM_BSD || BX_PLATFORM_HURD || BX_PLATFORM_RPI
- 	return (void*)wmi.info.x11.window;
- #   elif BX_PLATFORM_OSX
- 	return wmi.info.cocoa.window;
++		{ "gnu",           "GNU"                    },
+ 		{ "macosx",        "OSX"                    },
+ 		{ "windows",       "Windows"                },
+ 		{ "haiku",         "Haiku"                  },

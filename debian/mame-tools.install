@@ -6,3 +6,4 @@ jedutil usr/bin
 ldresample usr/bin
 ldverify usr/bin
 romcmp usr/bin
+unidasm usr/bin
