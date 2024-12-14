@@ -1,0 +1,43 @@
+Description: Do not pass -m64 to alpha, ia64 or riscv64 builds.
+Author: Jordi Mallach <jordi@debian.org>
+Forwarded: no
+Last-Update: 2021-09-25
+
+Index: mame/makefile
+===================================================================
+--- mame.orig/makefile
++++ mame/makefile
+@@ -162,6 +162,12 @@ endif
+ ifneq ($(filter alpha,$(UNAME_P)),)
+ PLATFORM := alpha
+ endif
++ifneq ($(filter ia64,$(UNAME_M)),)
++PLATFORM := ia64
++endif
++ifneq ($(filter ia64,$(UNAME_P)),)
++PLATFORM := ia64
++endif
+ ifneq ($(filter arm%,$(UNAME_M)),)
+ PLATFORM := arm
+ endif
+@@ -407,6 +413,20 @@ ifeq ($(findstring s390x,$(UNAME)),s390x
+ ifndef FORCE_DRC_C_BACKEND
+ 	FORCE_DRC_C_BACKEND := 1
+ endif
++endif
++
++ifeq ($(findstring alpha,$(UNAME)),alpha)
++ARCHITECTURE :=
++ifndef FORCE_DRC_C_BACKEND
++	FORCE_DRC_C_BACKEND := 1
++endif
++endif
++
++ifeq ($(findstring ia64,$(UNAME)),ia64)
++ARCHITECTURE :=
++ifndef FORCE_DRC_C_BACKEND
++	FORCE_DRC_C_BACKEND := 1
++endif
+ endif
+ 
+ ifeq ($(findstring riscv64,$(UNAME)),riscv64)
